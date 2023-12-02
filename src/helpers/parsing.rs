@@ -1,7 +1,6 @@
 use nom::{
-    branch::alt,
     bytes::complete::take_while1,
-    character::complete::{char, crlf, line_ending},
+    character::complete::{line_ending},
     combinator::opt,
     error::ParseError,
     multi::separated_list0,

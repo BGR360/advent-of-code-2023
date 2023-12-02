@@ -1,3 +1,5 @@
+use advent_of_code::debugln;
+
 advent_of_code::solution!(2);
 
 #[derive(Debug, Clone)]
@@ -45,19 +47,54 @@ pub fn part_one(input: &str) -> Option<u32> {
     Some(sum)
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+/// Returns the largest count of the given color that was observed in any round
+/// of the given game.
+fn minimum_count_required_for_color(game: &Game, target_color: Color) -> u32 {
+    game.rounds
+        .iter()
+        .flat_map(|round| round.cubes_revealed.iter())
+        .filter_map(|&(count, color)| {
+            if color == target_color {
+                Some(count)
+            } else {
+                None
+            }
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+fn power_of_game(game: &Game) -> u32 {
+    debugln!("{game:?}");
+
+    let r = minimum_count_required_for_color(game, Color::Red);
+    let g = minimum_count_required_for_color(game, Color::Green);
+    let b = minimum_count_required_for_color(game, Color::Blue);
+
+    debugln!("[r={r}, g={g}, b={b}]");
+
+    r.checked_mul(g)
+        .and_then(|rg| rg.checked_mul(b))
+        .expect("integer overflow")
+}
+
+pub fn part_two(input: &str) -> Option<u32> {
+    let games = parsing::parse_input(input);
+
+    let sum = games
+        .into_iter()
+        .map(|game| power_of_game(&game))
+        .reduce(|a, b| a.checked_add(b).expect("integer overflow"))
+        .expect("there is at least one game");
+
+    Some(sum)
 }
 
 mod parsing {
     use super::*;
 
     use nom::{
-        branch::alt,
-        bytes::complete::tag,
-        multi::separated_list1,
-        sequence::{delimited, tuple},
-        IResult, Parser,
+        branch::alt, bytes::complete::tag, multi::separated_list1, sequence::tuple, IResult, Parser,
     };
     use nom_supreme::final_parser::final_parser;
 
@@ -123,6 +160,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(2286));
     }
 }
