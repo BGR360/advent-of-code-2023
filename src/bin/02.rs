@@ -96,9 +96,8 @@ mod parsing {
     use nom::{
         branch::alt, bytes::complete::tag, multi::separated_list1, sequence::tuple, IResult, Parser,
     };
-    use nom_supreme::final_parser::final_parser;
 
-    use advent_of_code::helpers::parsing::{decimal_number, line_separated};
+    use advent_of_code::helpers::parsing::{decimal_number, final_parser, line_separated};
 
     fn color(input: &str) -> IResult<&str, Color> {
         alt((
@@ -142,8 +141,7 @@ mod parsing {
 
     /// Parses a list of games from the puzzle input.
     pub fn parse_input(input: &str) -> Vec<Game> {
-        let r: Result<_, ()> = final_parser(line_separated(game))(input);
-        r.expect("input should be valid")
+        final_parser(line_separated(game))(input).expect("input should be valid")
     }
 }
 
