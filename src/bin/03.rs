@@ -95,8 +95,33 @@ pub fn part_one(input: &str) -> Option<u32> {
     Some(sum)
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+fn get_gear_ratio((row, col, c): (usize, usize, u8), numbers: &[Number]) -> Option<u32> {
+    if c != b'*' {
+        // not a gear; wrong symbol
+        return None;
+    }
+
+    let adjacent_numbers: Vec<&Number> = numbers
+        .iter()
+        .filter(|number| number.is_adjacent_to((row, col)))
+        .collect();
+
+    let Ok([num1, num2]) = <[&Number; 2]>::try_from(adjacent_numbers) else {
+        // not a gear; must be adjacent to exactly two numbers
+        return None;
+    };
+
+    Some(num1.value * num2.value)
+}
+
+pub fn part_two(input: &str) -> Option<u32> {
+    let numbers = numbers(input);
+
+    let sum = schematic_cells(input)
+        .filter_map(|(row, col, c)| get_gear_ratio((row, col, c), &numbers))
+        .sum();
+
+    Some(sum)
 }
 
 #[cfg(test)]
@@ -112,6 +137,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(467835));
     }
 }
