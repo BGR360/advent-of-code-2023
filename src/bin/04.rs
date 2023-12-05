@@ -35,8 +35,27 @@ pub fn part_one(input: &str) -> Option<u32> {
     Some(sum)
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<u32> {
+    let cards = parsing::parse_input(input);
+
+    // Start with one of each card.
+    let mut card_counts = vec![1u32; cards.len()];
+
+    for (idx, card) in cards.iter().enumerate() {
+        let num_matches: usize = card.num_matches().try_into().expect("integer overflow");
+
+        // Indices of all the cards we win copies of.
+        let copies_won = (idx + 1)..(idx + 1 + num_matches);
+
+        // The number of copies we win of each card.
+        let num_copies = card_counts[idx];
+
+        for copy_idx in copies_won {
+            card_counts[copy_idx] += num_copies;
+        }
+    }
+
+    Some(card_counts.into_iter().sum())
 }
 
 mod parsing {
@@ -91,6 +110,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(30));
     }
 }
