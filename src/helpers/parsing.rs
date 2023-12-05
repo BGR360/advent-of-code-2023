@@ -1,10 +1,17 @@
+use std::fmt::Debug;
+use std::str::FromStr;
+
 use nom::{
     bytes::complete::take_while1, character::complete::line_ending, combinator::opt,
     error::ParseError, multi::separated_list0, sequence::tuple, IResult, Parser,
 };
 
 // parses a decimal number like "42"
-pub fn decimal_number(input: &str) -> IResult<&str, u32> {
+pub fn decimal_number<T>(input: &str) -> IResult<&str, T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
     take_while1(|c: char| c.is_ascii_digit())
         .map(|number: &str| number.parse().expect("must parse"))
         .parse(input)
