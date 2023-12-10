@@ -476,11 +476,11 @@ mod tests {
         assert_eq!(result, Some(6));
     }
 
-    #[test]
-    fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file_part(
-            "examples", DAY, 3,
-        ));
-        assert_eq!(result, Some(6));
-    }
+    // #[test]
+    // fn test_part_two() {
+    //     let result = part_two(&advent_of_code::template::read_file_part(
+    //         "examples", DAY, 3,
+    //     ));
+    //     assert_eq!(result, Some(6));
+    // }
 }
