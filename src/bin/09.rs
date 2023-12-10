@@ -8,8 +8,8 @@ pub struct OasisReport {
     pub histories: Vec<Vec<i32>>,
 }
 
-fn predict_next(seq: &[i32]) -> i32 {
-    fn predict_next(seq: &[i32], depth: usize) -> i32 {
+fn predict(seq: &[i32], get_next_fn: impl Fn(&[i32], i32) -> i32) -> i32 {
+    fn predict(seq: &[i32], get_next_fn: &impl Fn(&[i32], i32) -> i32, depth: usize) -> i32 {
         #[cfg(debug_assertions)]
         let indent = String::from_utf8(vec![b' '; depth * 4]).unwrap();
 
@@ -25,9 +25,9 @@ fn predict_next(seq: &[i32]) -> i32 {
                 .map(|(a, b)| b - a)
                 .collect_vec();
 
-            let next_diff = predict_next(&differences, depth + 1);
+            let next_diff = predict(&differences, get_next_fn, depth + 1);
 
-            seq.last().unwrap() + next_diff
+            get_next_fn(seq, next_diff)
         };
 
         debugln!("{indent}next: {next}");
@@ -35,7 +35,15 @@ fn predict_next(seq: &[i32]) -> i32 {
         next
     }
 
-    predict_next(seq, 0)
+    predict(seq, &get_next_fn, 0)
+}
+
+fn predict_next(seq: &[i32]) -> i32 {
+    predict(seq, |seq, next_diff| seq.last().unwrap() + next_diff)
+}
+
+fn predict_prev(seq: &[i32]) -> i32 {
+    predict(seq, |seq, next_diff| seq.first().unwrap() - next_diff)
 }
 
 pub fn part_one(input: &str) -> Option<i32> {
@@ -50,8 +58,16 @@ pub fn part_one(input: &str) -> Option<i32> {
     Some(sum)
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<i32> {
+    let report = parsing::parse_input(input);
+
+    let sum = report
+        .histories
+        .iter()
+        .map(|history| predict_prev(&history[..]))
+        .sum();
+
+    Some(sum)
 }
 
 mod parsing {
@@ -87,6 +103,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(2));
     }
 }
