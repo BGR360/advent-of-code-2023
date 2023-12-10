@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 use std::str::FromStr;
 
-use nom::{
-    bytes::complete::take_while1, character::complete::line_ending, combinator::opt,
-    error::ParseError, multi::separated_list0, sequence::tuple, IResult, Parser,
+use nom::error::ParseError;
+pub use nom::{
+    branch::*, bytes::complete::*, character::complete::*, combinator::*, multi::*, sequence::*, *,
 };
 
 // parses a decimal number like "42"
