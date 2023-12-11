@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    fmt,
+    ops::{Index, IndexMut},
+};
 
 pub use glam::{IVec2, UVec2};
 
@@ -22,6 +25,14 @@ impl<T, Pos> Grid<T, Pos> {
         Self::from_inner(grid::Grid::new(rows, cols))
     }
 
+    pub fn init(rows: usize, cols: usize, value: T) -> Self
+    where
+        T: Clone,
+        Pos: Default,
+    {
+        Self::from_inner(grid::Grid::init(rows, cols, value))
+    }
+
     pub fn from_inner(inner: grid::Grid<T>) -> Self
     where
         Pos: Default,
@@ -37,6 +48,36 @@ impl<T, Pos> Grid<T, Pos> {
         Pos: Default,
     {
         Self::from_inner(grid::Grid::from_vec(vec, cols))
+    }
+
+    pub fn clear(&mut self)
+    where
+        T: Default,
+    {
+        self.inner.clear();
+    }
+
+    pub fn row_count(&self) -> usize {
+        self.inner.rows()
+    }
+
+    pub fn col_count(&self) -> usize {
+        self.inner.cols()
+    }
+
+    pub fn size(&self) -> (usize, usize) {
+        (self.row_count(), self.col_count())
+    }
+
+    /// Returns a value implementing [`fmt::Display`] that will print the grid
+    /// using the function `f` to convert each cell to a value that is
+    /// printable.
+    pub fn display_with<F, O>(&self, f: F) -> GridPrinter<'_, T, F>
+    where
+        F: Fn(&T) -> O,
+        O: fmt::Display,
+    {
+        GridPrinter::new(self, f)
     }
 }
 
@@ -160,6 +201,30 @@ where
     }
 }
 
+impl<T, Pos> Index<Pos> for Grid<T, Pos>
+where
+    Pos: GridIndex,
+{
+    type Output = T;
+
+    #[track_caller]
+    fn index(&self, pos: Pos) -> &Self::Output {
+        let (row, col) = self.make_row_col(pos).expect("index out of bounds");
+        &self.inner[(row, col)]
+    }
+}
+
+impl<T, Pos> IndexMut<Pos> for Grid<T, Pos>
+where
+    Pos: GridIndex,
+{
+    #[track_caller]
+    fn index_mut(&mut self, pos: Pos) -> &mut Self::Output {
+        let (row, col) = self.make_row_col(pos).expect("index out of bounds");
+        &mut self.inner[(row, col)]
+    }
+}
+
 impl<T, Pos> fmt::Display for Grid<T, Pos>
 where
     T: fmt::Display,
@@ -173,6 +238,43 @@ where
 
             for col in 0..self.inner.cols() {
                 write!(f, "{}", self.inner.get(row, col).unwrap())?;
+            }
+
+            first_row = false;
+        }
+        Ok(())
+    }
+}
+
+pub struct GridPrinter<'a, T, F> {
+    grid: &'a grid::Grid<T>,
+    mapper: F,
+}
+
+impl<'a, T, F> GridPrinter<'a, T, F> {
+    pub fn new<Pos>(grid: &'a Grid<T, Pos>, mapper: F) -> Self {
+        Self {
+            grid: &grid.inner,
+            mapper,
+        }
+    }
+}
+
+impl<T, O, F> fmt::Display for GridPrinter<'_, T, F>
+where
+    F: Fn(&T) -> O,
+    O: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut first_row = true;
+        for row in 0..self.grid.rows() {
+            if !first_row {
+                writeln!(f)?;
+            }
+
+            for col in 0..self.grid.cols() {
+                let val = (self.mapper)(self.grid.get(row, col).unwrap());
+                write!(f, "{}", val)?;
             }
 
             first_row = false;
