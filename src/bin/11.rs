@@ -8,6 +8,8 @@ use itertools::Itertools;
 use types::*;
 mod types {
 
+    use advent_of_code::debugln;
+
     use super::*;
 
     pub type Pos = glam::UVec2;
@@ -85,7 +87,9 @@ mod types {
         /// Computes the distance bewteen two points in the map, taking into
         /// account the expansion of empty rows and columns as specified in
         /// puzzle part one.
-        pub fn distance_between(&self, a: Pos, b: Pos) -> usize {
+        pub fn distance_between(&self, a: Pos, b: Pos, empty_multipler: usize) -> usize {
+            debugln!("=== DISTANCE BETWEEN {} AND {} ===", a, b);
+
             if a == b {
                 return 0;
             }
@@ -95,9 +99,11 @@ mod types {
 
             let beg_row = a_row.min(b_row);
             let end_row = a_row.max(b_row);
+            debugln!("beg_row={beg_row}, end_row={end_row}");
 
             let beg_col = a_col.min(b_col);
             let end_col = a_col.max(b_col);
+            debugln!("beg_col={beg_col}, end_col={end_col}");
 
             let n_empty_rows_between = self
                 .empty_rows
@@ -111,12 +117,21 @@ mod types {
                 .filter(|col| (beg_col..end_col).contains(col))
                 .count();
 
-            (end_row - beg_row) + (end_col - beg_col) + n_empty_rows_between + n_empty_cols_between
+            debugln!("n_empty_row={n_empty_rows_between}, n_empty_col={n_empty_cols_between}");
+
+            let distance = (end_row - beg_row)
+                + (end_col - beg_col)
+                + (n_empty_rows_between * (empty_multipler - 1))
+                + (n_empty_cols_between * (empty_multipler - 1));
+
+            debugln!("Distance between {} and {}: {}", a, b, distance);
+
+            distance
         }
     }
 }
 
-pub fn part_one(input: &str) -> Option<usize> {
+fn solution(input: &str, empty_multiplier: usize) -> Option<usize> {
     let map = parsing::parse_input(input);
 
     let galaxy_pairs = map
@@ -126,14 +141,18 @@ pub fn part_one(input: &str) -> Option<usize> {
 
     let sum: usize = galaxy_pairs
         .into_iter()
-        .map(|(a, b)| map.distance_between(a, b))
+        .map(|(a, b)| map.distance_between(a, b, empty_multiplier))
         .sum();
 
     Some(sum / 2)
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_one(input: &str) -> Option<usize> {
+    solution(input, 2)
+}
+
+pub fn part_two(input: &str) -> Option<usize> {
+    solution(input, 1_000_000)
 }
 
 mod parsing {
@@ -166,8 +185,14 @@ mod tests {
     }
 
     #[test]
-    fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+    fn test_part_two_10() {
+        let result = solution(&advent_of_code::template::read_file("examples", DAY), 10);
+        assert_eq!(result, Some(1030));
+    }
+
+    #[test]
+    fn test_part_two_100() {
+        let result = solution(&advent_of_code::template::read_file("examples", DAY), 100);
+        assert_eq!(result, Some(8410));
     }
 }
