@@ -102,6 +102,16 @@ where
         self.inner.get_mut(row, col)
     }
 
+    #[inline]
+    pub fn pos_to_row_col(&self, pos: Pos) -> Option<(usize, usize)> {
+        self.make_row_col(pos)
+    }
+
+    #[inline]
+    pub fn row_col_to_pos(&self, row: usize, col: usize) -> Option<Pos> {
+        self.make_pos(row, col)
+    }
+
     /// Returns an iterator over the whole grid, starting from the first row and column.
     ///
     /// The iteration order is dependent on the internal memory layout.

@@ -576,20 +576,17 @@ mod parsing {
     }
 
     fn tile(input: &str) -> IResult<&str, Tile> {
-        let tile = alt((
+        let mut tile = alt((
             char('.').map(|_| Tile::Ground),
             char('S').map(|_| Tile::Start),
             pipe.map(Tile::Pipe),
         ));
 
-        terminated(tile, many0(line_ending))(input)
+        (tile)(input)
     }
 
     pub fn parse_input(input: &str) -> super::Map {
-        let n_col = input.lines().next().unwrap().len();
-
-        let tiles: Vec<Tile> = final_parser(many1(tile))(input).expect("input should be valid");
-        let tiles = Grid::from_vec(tiles, n_col);
+        let tiles = final_parser(grid(tile))(input).expect("input should be valid");
 
         super::Map { tiles }
     }
