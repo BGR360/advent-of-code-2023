@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, path::Display};
 
 use advent_of_code::debugln;
 use itertools::Itertools;
@@ -21,6 +21,12 @@ impl Condition {
 }
 
 impl fmt::Debug for Condition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl fmt::Display for Condition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.symbol() as char)
     }
@@ -56,7 +62,11 @@ impl ConditionRecord {
 
         let is_valid = damaged_groups == self.damaged_groups;
 
-        debugln!("Is {:?} a valid arrangement: {}", conditions, is_valid);
+        debugln!(
+            "Is {} a valid arrangement: {}",
+            display_conditions(conditions),
+            is_valid
+        );
 
         is_valid
     }
@@ -76,11 +86,102 @@ impl ConditionRecord {
             .enumerate()
             .filter_map(|(idx, condition)| condition.is_none().then_some(idx))
     }
+
+    /// "Unfold" the record as part Part Two instructions
+    pub fn unfold(self) -> Self {
+        let conditions = itertools::repeat_n(self.conditions, 5)
+            .intersperse(vec![None])
+            .flatten()
+            .collect();
+
+        let damaged_groups = itertools::repeat_n(self.damaged_groups, 5)
+            .flatten()
+            .collect();
+
+        Self {
+            conditions,
+            damaged_groups,
+        }
+    }
+}
+
+trait DisplayCondition {
+    fn symbol(&self) -> u8;
+}
+
+impl DisplayCondition for Condition {
+    fn symbol(&self) -> u8 {
+        self.symbol()
+    }
+}
+
+impl DisplayCondition for Option<Condition> {
+    fn symbol(&self) -> u8 {
+        match self {
+            None => b'?',
+            Some(c) => c.symbol(),
+        }
+    }
+}
+
+fn display_conditions<T: DisplayCondition>(conditions: &[T]) -> impl fmt::Display + '_ {
+    struct DisplayConditions<'a, T> {
+        conditions: &'a [T],
+    }
+
+    impl<'a, T> fmt::Display for DisplayConditions<'a, T>
+    where
+        T: DisplayCondition,
+    {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            for c in self.conditions.iter() {
+                let symbol = c.symbol() as char;
+                write!(f, "{symbol}")?;
+            }
+            Ok(())
+        }
+    }
+
+    DisplayConditions { conditions }
+}
+
+fn display_groups(groups: &[usize]) -> impl fmt::Display + '_ {
+    struct DisplayGroups<'a> {
+        groups: &'a [usize],
+    }
+
+    impl fmt::Display for DisplayGroups<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let mut first = true;
+            for &group in self.groups {
+                if !first {
+                    write!(f, ",")?;
+                }
+                first = false;
+
+                write!(f, "{group}")?;
+            }
+            Ok(())
+        }
+    }
+
+    DisplayGroups { groups }
+}
+
+impl fmt::Display for ConditionRecord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {}",
+            display_conditions(&self.conditions),
+            display_groups(&self.damaged_groups),
+        )
+    }
 }
 
 fn num_possible_arrangements(record: &ConditionRecord) -> usize {
     debugln!("============== num_possible_arrangments ==============");
-    debugln!("record: {record:#?}");
+    debugln!("record: {record}");
 
     let num_damaged_total = record.num_damaged_springs();
     let num_damaged_known = record.damaged_indices().count();
@@ -128,6 +229,24 @@ fn num_possible_arrangements(record: &ConditionRecord) -> usize {
         .count()
 }
 
+fn num_possible_arrangements_fast(record: &ConditionRecord) -> usize {
+    debugln!("============== num_possible_arrangments ==============");
+    debugln!("record: {record}");
+
+    let num_damaged_total = record.num_damaged_springs();
+    let num_damaged_known = record.damaged_indices().count();
+    let num_damaged_unknown = num_damaged_total - num_damaged_known;
+
+    let unknown_indices = record.unknown_indices().collect_vec();
+
+    debugln!("num_damaged_total: {num_damaged_total}");
+    debugln!("num_damaged_known: {num_damaged_known}");
+    debugln!("num_damaged_unknown: {num_damaged_unknown}");
+    debugln!("unknown_indices: {unknown_indices:?}");
+
+    0
+}
+
 pub fn part_one(input: &str) -> Option<usize> {
     let records = parsing::parse_input(input);
 
@@ -136,8 +255,17 @@ pub fn part_one(input: &str) -> Option<usize> {
     Some(sum)
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<usize> {
+    let records = parsing::parse_input(input);
+
+    let unfolded = records
+        .into_iter()
+        .map(ConditionRecord::unfold)
+        .collect_vec();
+
+    let sum = unfolded.iter().map(num_possible_arrangements_fast).sum();
+
+    Some(sum)
 }
 
 mod parsing {
@@ -179,7 +307,7 @@ mod tests {
         let result = part_one(&advent_of_code::template::read_file_part(
             "examples", DAY, 1,
         ));
-        assert_eq!(result, Some(0));
+        assert_eq!(result, Some(6));
     }
 
     #[test]
@@ -195,6 +323,6 @@ mod tests {
         let result = part_two(&advent_of_code::template::read_file_part(
             "examples", DAY, 2,
         ));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(525152));
     }
 }
