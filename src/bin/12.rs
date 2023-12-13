@@ -1,4 +1,4 @@
-use std::{fmt, path::Display};
+use std::fmt;
 
 use advent_of_code::debugln;
 use itertools::Itertools;
@@ -7,6 +7,7 @@ advent_of_code::solution!(12);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Condition {
+    Unknown,     // '?'
     Damaged,     // '#'
     Operational, // '.'
 }
@@ -14,6 +15,7 @@ pub enum Condition {
 impl Condition {
     pub fn symbol(&self) -> u8 {
         match self {
+            Condition::Unknown => b'?',
             Condition::Damaged => b'#',
             Condition::Operational => b'.',
         }
@@ -35,7 +37,7 @@ impl fmt::Display for Condition {
 #[derive(Debug, Clone)]
 pub struct ConditionRecord {
     /// The (possibly unknown) condition of each spring in this row.
-    pub conditions: Vec<Option<Condition>>,
+    pub conditions: Vec<Condition>,
 
     /// The size of each contiguous group of damaged springs in this row.
     pub damaged_groups: Vec<usize>,
@@ -63,9 +65,9 @@ impl ConditionRecord {
         let is_valid = damaged_groups == self.damaged_groups;
 
         debugln!(
-            "Is {} a valid arrangement: {}",
+            "{} {}",
             display_conditions(conditions),
-            is_valid
+            if is_valid { "✅" } else { "❌" }
         );
 
         is_valid
@@ -75,22 +77,20 @@ impl ConditionRecord {
         self.conditions
             .iter()
             .enumerate()
-            .filter_map(|(idx, condition)| {
-                matches!(condition, Some(Condition::Damaged)).then_some(idx)
-            })
+            .filter_map(|(idx, &condition)| (condition == Condition::Damaged).then_some(idx))
     }
 
     pub fn unknown_indices(&self) -> impl Iterator<Item = usize> + '_ {
         self.conditions
             .iter()
             .enumerate()
-            .filter_map(|(idx, condition)| condition.is_none().then_some(idx))
+            .filter_map(|(idx, &condition)| (condition == Condition::Unknown).then_some(idx))
     }
 
     /// "Unfold" the record as part Part Two instructions
     pub fn unfold(self) -> Self {
         let conditions = itertools::repeat_n(self.conditions, 5)
-            .intersperse(vec![None])
+            .intersperse(vec![Condition::Unknown])
             .flatten()
             .collect();
 
@@ -179,8 +179,15 @@ impl fmt::Display for ConditionRecord {
     }
 }
 
-fn num_possible_arrangements(record: &ConditionRecord) -> usize {
-    debugln!("============== num_possible_arrangments ==============");
+#[derive(Debug)]
+struct Arrangements {
+    num_allowed: usize,
+    num_ending_in_operational: usize,
+    num_beginning_in_operational: usize,
+}
+
+fn arrangements(record: &ConditionRecord) -> Arrangements {
+    debugln!("===== arrangements =====");
     debugln!("record: {record}");
 
     let num_damaged_total = record.num_damaged_springs();
@@ -194,63 +201,118 @@ fn num_possible_arrangements(record: &ConditionRecord) -> usize {
     debugln!("num_damaged_unknown: {num_damaged_unknown}");
     debugln!("unknown_indices: {unknown_indices:?}");
 
-    if num_damaged_unknown == 0 {
-        return 1;
-    }
+    // if num_damaged_unknown == 0 {
+    //     return 1;
+    // }
 
     let produce_arrangement = |damaged_indices: &[usize]| {
-        // let mut conditions = record.conditions.clone();
-        // for &idx in damaged_indices {
-        //     conditions[idx] = Some(Condition::Damaged)
-        // }
         record
             .conditions
             .iter()
             .copied()
             .enumerate()
-            .map(|(idx, maybe_condition)| match maybe_condition {
-                Some(condition) => condition,
-                None => {
+            .map(|(idx, condition)| match condition {
+                Condition::Unknown => {
                     if damaged_indices.contains(&idx) {
                         Condition::Damaged
                     } else {
                         Condition::Operational
                     }
                 }
+                _ => condition,
             })
             .collect_vec()
     };
 
-    unknown_indices
+    let allowed_arrangements_and_endpoints: Vec<(bool, bool)> = unknown_indices
         .into_iter()
         .combinations(num_damaged_unknown)
         .map(|damaged_indices| produce_arrangement(&damaged_indices))
         .filter(|arrangement| record.is_valid_arrangement(arrangement))
-        .count()
+        .map(|arrangement| {
+            let beg = *arrangement.first().unwrap() == Condition::Operational;
+            let end = *arrangement.last().unwrap() == Condition::Operational;
+            (beg, end)
+        })
+        .collect();
+
+    let num_allowed = allowed_arrangements_and_endpoints.len();
+    let num_beginning_in_operational = allowed_arrangements_and_endpoints
+        .iter()
+        .filter(|&&(beg, end)| beg)
+        .count();
+    let num_ending_in_operational = allowed_arrangements_and_endpoints
+        .iter()
+        .filter(|&&(beg, end)| end)
+        .count();
+
+    let arr = Arrangements {
+        num_allowed,
+        num_ending_in_operational,
+        num_beginning_in_operational,
+    };
+
+    debugln!("{arr:#?}");
+
+    arr
 }
 
-fn num_possible_arrangements_fast(record: &ConditionRecord) -> usize {
-    debugln!("============== num_possible_arrangments ==============");
-    debugln!("record: {record}");
+fn num_allowed_arrangements(record: &ConditionRecord) -> usize {
+    arrangements(record).num_allowed
+}
 
-    let num_damaged_total = record.num_damaged_springs();
-    let num_damaged_known = record.damaged_indices().count();
-    let num_damaged_unknown = num_damaged_total - num_damaged_known;
+fn num_allowed_arrangements_unfolded(mut record: ConditionRecord) -> usize {
+    debugln!("================= UNFOLDED ===================");
 
-    let unknown_indices = record.unknown_indices().collect_vec();
+    let Arrangements {
+        num_allowed,
+        num_ending_in_operational,
+        num_beginning_in_operational,
+    } = arrangements(&record);
 
-    debugln!("num_damaged_total: {num_damaged_total}");
-    debugln!("num_damaged_known: {num_damaged_known}");
-    debugln!("num_damaged_unknown: {num_damaged_unknown}");
-    debugln!("unknown_indices: {unknown_indices:?}");
+    let mut total_arrangements = 0;
 
-    0
+    let num_not_ending_in_operational = num_allowed - num_ending_in_operational;
+    total_arrangements +=
+        num_not_ending_in_operational * num_allowed * num_allowed * num_allowed * num_allowed;
+
+    if num_ending_in_operational > 0 {
+        debugln!("===== ALT 1 =====");
+
+        record.conditions.insert(0, Condition::Unknown);
+        let num_allowed_alt = num_allowed_arrangements(&record);
+
+        total_arrangements += num_ending_in_operational
+            * num_allowed_alt
+            * num_allowed_alt
+            * num_allowed_alt
+            * num_allowed_alt;
+
+        record.conditions.remove(0);
+    }
+
+    // if num_beginning_in_operational > 0 {
+    //     debugln!("===== ALT 2 =====");
+
+    //     record.conditions.push(Condition::Unknown);
+    //     let num_allowed_alt = num_allowed_arrangements(&record);
+
+    //     total_arrangements += num_beginning_in_operational
+    //         * num_allowed_alt
+    //         * num_allowed_alt
+    //         * num_allowed_alt
+    //         * num_allowed_alt;
+
+    //     record.conditions.pop();
+    // }
+
+    total_arrangements
 }
 
 pub fn part_one(input: &str) -> Option<usize> {
     let records = parsing::parse_input(input);
 
-    let sum = records.iter().map(num_possible_arrangements).sum();
+    let sum = records.iter().map(num_allowed_arrangements).sum();
 
     Some(sum)
 }
@@ -258,12 +320,15 @@ pub fn part_one(input: &str) -> Option<usize> {
 pub fn part_two(input: &str) -> Option<usize> {
     let records = parsing::parse_input(input);
 
-    let unfolded = records
-        .into_iter()
-        .map(ConditionRecord::unfold)
-        .collect_vec();
+    // let unfolded = records
+    //     .into_iter()
+    //     .map(ConditionRecord::unfold)
+    //     .collect_vec();
 
-    let sum = unfolded.iter().map(num_possible_arrangements_fast).sum();
+    let sum = records
+        .into_iter()
+        .map(num_allowed_arrangements_unfolded)
+        .sum();
 
     Some(sum)
 }
@@ -273,11 +338,11 @@ mod parsing {
 
     use super::*;
 
-    fn condition(input: &str) -> IResult<&str, Option<Condition>> {
+    fn condition(input: &str) -> IResult<&str, Condition> {
         alt((
-            char('?').map(|_| None),
-            char('#').map(|_| Some(Condition::Damaged)),
-            char('.').map(|_| Some(Condition::Operational)),
+            char('?').map(|_| Condition::Unknown),
+            char('#').map(|_| Condition::Damaged),
+            char('.').map(|_| Condition::Operational),
         ))(input)
     }
 
@@ -295,6 +360,10 @@ mod parsing {
 
     pub fn parse_input(input: &str) -> Vec<ConditionRecord> {
         final_parser(line_separated(row))(input).expect("input should be valid")
+    }
+
+    pub fn parse_record(input: &str) -> ConditionRecord {
+        final_parser(row)(input).unwrap()
     }
 }
 
@@ -324,5 +393,34 @@ mod tests {
             "examples", DAY, 2,
         ));
         assert_eq!(result, Some(525152));
+    }
+
+    fn num_arrangements(record: &str) -> usize {
+        let record = parsing::parse_record(record);
+        num_allowed_arrangements(&record)
+    }
+
+    #[test]
+    fn misc_a() {
+        assert_eq!(num_arrangements("???.### 1,1,3"), 1);
+        assert_eq!(num_arrangements(".??..??...?##. 1,1,3"), 4);
+        assert_eq!(num_arrangements("?.??..??...?##. 1,1,3"), 8);
+        assert_eq!(num_arrangements("?###???????? 3,2,1"), 10);
+        assert_eq!(num_arrangements("?###????????? 3,2,1"), 15);
+    }
+
+    fn num_arrangements_unfolded(record: &str) -> usize {
+        let record = parsing::parse_record(record);
+        num_allowed_arrangements_unfolded(record)
+    }
+
+    #[test]
+    fn misc_b() {
+        assert_eq!(num_arrangements_unfolded("???.### 1,1,3"), 1);
+        assert_eq!(num_arrangements_unfolded(".??..??...?##. 1,1,3"), 16384);
+        assert_eq!(num_arrangements_unfolded("?#?#?#?#?#?#?#? 1,3,1,6"), 1);
+        assert_eq!(num_arrangements_unfolded("????.#...#... 4,1,1"), 16);
+        assert_eq!(num_arrangements_unfolded("????.######..#####. 1,6,5"), 2500);
+        assert_eq!(num_arrangements_unfolded("?###???????? 3,2,1"), 506250);
     }
 }
