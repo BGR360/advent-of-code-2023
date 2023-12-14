@@ -8,7 +8,6 @@ version = "0.9.3"
 dependencies = [
  "aoc_helpers",
  "glam",
- "grid",
  "itertools",
  "nom",
  "nom-supreme",
