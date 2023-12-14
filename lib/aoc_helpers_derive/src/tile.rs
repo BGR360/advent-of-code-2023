@@ -1,5 +1,5 @@
 use proc_macro2::{Span, TokenStream};
-use quote::quote;
+use quote::{quote, quote_spanned};
 
 use crate::{Error, Result};
 
@@ -34,13 +34,19 @@ pub fn generate(input: syn::DeriveInput) -> Result<TokenStream> {
 #[derive(Debug)]
 struct TileEnum<'a> {
     ident: &'a syn::Ident,
-    variants: Vec<TileEnumVariant<'a>>,
+    variants: Vec<TileVariant<'a>>,
 }
 
 #[derive(Debug)]
-struct TileEnumVariant<'a> {
+struct TileVariant<'a> {
     ident: &'a syn::Ident,
-    symbol: syn::LitChar,
+    kind: TileVariantKind<'a>,
+}
+
+#[derive(Debug)]
+enum TileVariantKind<'a> {
+    Unit { symbol: syn::LitChar },
+    Tuple { ty: &'a syn::Type },
 }
 
 fn parse_enum(input: &syn::DeriveInput) -> Result<TileEnum<'_>> {
@@ -65,20 +71,53 @@ fn parse_enum(input: &syn::DeriveInput) -> Result<TileEnum<'_>> {
     Ok(TileEnum { ident, variants })
 }
 
-fn parse_enum_variant(variant: &syn::Variant) -> Result<TileEnumVariant<'_>> {
+fn parse_enum_variant(variant: &syn::Variant) -> Result<TileVariant<'_>> {
+    let mut tile_attr = None;
     let mut tile_symbol = None;
     for attr in &variant.attrs {
         if let Some(symbol) = parse_tile_attribute(attr)? {
             tile_symbol = Some(symbol);
+            tile_attr = Some(attr);
         }
     }
-    let Some(symbol) = tile_symbol else {
-        return Err(Error::new_spanned(variant, "Missing `#[tile()]` attribute"));
+
+    let kind = match (tile_symbol, &variant.fields) {
+        (Some(symbol), syn::Fields::Unit) => TileVariantKind::Unit { symbol },
+        (None, syn::Fields::Unnamed(fields)) if fields.unnamed.len() == 1 => {
+            let field = fields.unnamed.first().unwrap();
+            TileVariantKind::Tuple { ty: &field.ty }
+        }
+
+        (None, syn::Fields::Unit) => {
+            return Err(Error::new_spanned(
+                variant,
+                "missing `#[tile()]` attribute on variant",
+            ));
+        }
+        (Some(_), syn::Fields::Unnamed(_)) => {
+            return Err(Error::new_spanned(
+                tile_attr.unwrap(),
+                "`#[tile()]` attribute is not supported on tuple variants",
+            ));
+        }
+
+        (_, syn::Fields::Unnamed(fields)) => {
+            return Err(Error::new_spanned(
+                fields,
+                "tuple variants must have exactly 1 field",
+            ));
+        }
+        (_, syn::Fields::Named(_)) => {
+            return Err(Error::new_spanned(
+                variant,
+                "struct variants are not supported",
+            ));
+        }
     };
 
-    Ok(TileEnumVariant {
+    Ok(TileVariant {
         ident: &variant.ident,
-        symbol,
+        kind,
     })
 }
 
@@ -117,6 +156,7 @@ fn parse_tile_attribute(attr: &syn::Attribute) -> Result<Option<syn::LitChar>> {
 ///     match self {
 ///         Self::A => b'a',
 ///         Self::B => b'b',
+///         Self::Other(inner) => inner.symbol(),
 ///     }
 /// }
 /// ```
@@ -126,9 +166,14 @@ fn generate_symbol_method(eenum: &TileEnum) -> TokenStream {
         .iter()
         .map(|variant| {
             let ident = &variant.ident;
-            let symbol = &variant.symbol;
-            quote! {
-                Self::#ident => #symbol as u8
+            let span = ident.span();
+            match &variant.kind {
+                TileVariantKind::Unit { symbol } => quote_spanned! {span=>
+                    Self::#ident => u8::try_from(#symbol).unwrap()
+                },
+                TileVariantKind::Tuple { ty } => quote_spanned! {span=>
+                    Self::#ident(inner) => #ty::symbol(inner)
+                },
             }
         })
         .collect();
@@ -167,35 +212,67 @@ fn generate_u8_conversion(eenum: &TileEnum) -> TokenStream {
 fn generate_char_conversion(eenum: &TileEnum) -> TokenStream {
     let ident = &eenum.ident;
 
-    let match_arms: Vec<_> = eenum
-        .variants
-        .iter()
-        .map(|variant| {
-            let ident = &variant.ident;
-            let symbol = &variant.symbol;
-            quote! {
-                #symbol => Ok(Self::#ident),
-            }
-        })
-        .collect();
-
-    quote! {
+    let to_char = quote! {
         impl ::core::convert::From<#ident> for char {
             fn from(data: #ident) -> Self {
                 #ident::symbol(&data) as char
             }
         }
+    };
 
+    let unit_match_arms: Vec<_> = eenum
+        .variants
+        .iter()
+        .filter_map(|variant| {
+            let ident = &variant.ident;
+            let span = ident.span();
+            match &variant.kind {
+                TileVariantKind::Unit { symbol } => Some(quote_spanned! {span=>
+                    #symbol => Ok(Self::#ident),
+                }),
+                _ => None,
+            }
+        })
+        .collect();
+
+    let tuple_try_froms: Vec<_> = eenum
+        .variants
+        .iter()
+        .filter_map(|variant| {
+            let ident = &variant.ident;
+            let span = ident.span();
+            match &variant.kind {
+                TileVariantKind::Tuple { ty } => Some(quote_spanned! {span=>
+                    match <#ty as ::core::convert::TryFrom<char>>::try_from(data) {
+                        Ok(inner) => return Ok(Self::#ident(inner)),
+                        Err(_) => {}
+                    }
+                }),
+                _ => None,
+            }
+        })
+        .collect();
+
+    let from_char = quote! {
         impl ::core::convert::TryFrom<char> for #ident {
             type Error = ();
 
             fn try_from(data: char) -> ::core::result::Result<Self, Self::Error> {
                 match data {
-                    #(#match_arms)*
-                    _ => Err(()),
+                    #(#unit_match_arms)*
+                    _ => {
+                        #(#tuple_try_froms)*
+                        Err(())
+                    }
                 }
             }
         }
+    };
+
+    quote! {
+        #to_char
+
+        #from_char
     }
 }
 
@@ -237,18 +314,26 @@ fn generate_nom_parse(eenum: &TileEnum) -> TokenStream {
         .iter()
         .map(|variant| {
             let ident = &variant.ident;
-            let symbol = &variant.symbol;
-            quote! {
-                ::nom::Parser::map(
-                    ::nom::character::complete::char(#symbol),
-                    |_| Self::#ident
-                )
+            let span = ident.span();
+            match &variant.kind {
+                TileVariantKind::Unit { symbol } => quote_spanned! {span=>
+                    ::nom::Parser::map(
+                        ::nom::character::complete::char(#symbol),
+                        |_| Self::#ident
+                    )
+                },
+                TileVariantKind::Tuple { ty } => quote_spanned! {span=>
+                    ::nom::Parser::map(
+                        #ty::parse,
+                        Self::#ident
+                    )
+                },
             }
         })
         .collect();
 
     quote! {
-        fn parse(input: &str) -> ::nom::IResult<&str, Self> {
+        pub fn parse(input: &str) -> ::nom::IResult<&str, Self> {
             ::nom::branch::alt((
                 #(#variant_parsers),*
             ))(input)

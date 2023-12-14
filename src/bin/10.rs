@@ -17,28 +17,14 @@ mod types {
     pub type Pos = glam::UVec2;
     pub type Grid<T> = grid::Grid<T, Pos>;
 
-    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, grid::Tile)]
     pub enum Tile {
         #[default]
-        Ground, // '.'
-        Start, // 'S'
+        #[tile('.')]
+        Ground,
+        #[tile('S')]
+        Start,
         Pipe(Pipe),
-    }
-
-    impl Tile {
-        pub fn symbol(&self) -> u8 {
-            match self {
-                Tile::Ground => b'.',
-                Tile::Start => b'S',
-                Tile::Pipe(pipe) => pipe.symbol(),
-            }
-        }
-    }
-
-    impl fmt::Display for Tile {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.symbol() as char)
-        }
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -71,33 +57,20 @@ mod types {
         }
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, grid::Tile)]
     pub enum Pipe {
-        NtoS, // '|'
-        WtoE, // '-'
-        NtoE, // 'L'
-        NtoW, // 'J'
-        StoW, // '7'
-        StoE, // 'F'
-    }
-
-    impl Pipe {
-        pub fn symbol(&self) -> u8 {
-            match self {
-                Self::NtoS => b'|',
-                Self::WtoE => b'-',
-                Self::NtoE => b'L',
-                Self::NtoW => b'J',
-                Self::StoW => b'7',
-                Self::StoE => b'F',
-            }
-        }
-    }
-
-    impl fmt::Display for Pipe {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.symbol() as char)
-        }
+        #[tile('|')]
+        NtoS,
+        #[tile('-')]
+        WtoE,
+        #[tile('L')]
+        NtoE,
+        #[tile('J')]
+        NtoW,
+        #[tile('7')]
+        StoW,
+        #[tile('F')]
+        StoE,
     }
 
     impl Pipe {
@@ -331,7 +304,7 @@ impl fmt::Display for PathPrinter<'_> {
 /// Represents whether a given tile is to the left of, to the right of, or on
 /// a path being traced by pipes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Side {
+pub enum Side {
     Left,
     On,
     Right,
@@ -564,29 +537,8 @@ mod parsing {
 
     use super::*;
 
-    fn pipe(input: &str) -> IResult<&str, Pipe> {
-        alt((
-            char('|').map(|_| Pipe::NtoS),
-            char('-').map(|_| Pipe::WtoE),
-            char('L').map(|_| Pipe::NtoE),
-            char('J').map(|_| Pipe::NtoW),
-            char('7').map(|_| Pipe::StoW),
-            char('F').map(|_| Pipe::StoE),
-        ))(input)
-    }
-
-    fn tile(input: &str) -> IResult<&str, Tile> {
-        let mut tile = alt((
-            char('.').map(|_| Tile::Ground),
-            char('S').map(|_| Tile::Start),
-            pipe.map(Tile::Pipe),
-        ));
-
-        (tile)(input)
-    }
-
     pub fn parse_input(input: &str) -> super::Map {
-        let tiles = final_parser(grid(tile))(input).expect("input should be valid");
+        let tiles = final_parser(grid(Tile::parse))(input).expect("input should be valid");
 
         super::Map { tiles }
     }
