@@ -1,11 +1,10 @@
 advent_of_code::solution!(14);
 
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use advent_of_code::{debugln, helpers::grid};
-use aoc_helpers::math::CheckedSub;
 
-pub type Pos = grid::UVec2;
+pub type Pos = grid::IVec2;
 pub type Grid<T> = grid::Grid<T, Pos>;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, grid::Tile)]
@@ -19,39 +18,78 @@ pub enum Tile {
     Cube,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Platform {
     pub tiles: Grid<Tile>,
 }
 
 impl Platform {
-    pub fn tilt_up(&mut self) {
-        loop {
-            let mut tiles = self.tiles.clone();
-            Self::tilt_up_once(&mut tiles);
+    pub fn spin_cylce(&mut self) {
+        self.tilt(Pos::NEG_Y);
+        self.tilt(Pos::NEG_X);
+        self.tilt(Pos::Y);
+        self.tilt(Pos::X);
+    }
 
-            if tiles == self.tiles {
-                break;
+    pub fn tilt(&mut self, dir: Pos) {
+        let tiles = &mut self.tiles;
+
+        let n_rows = tiles.row_count();
+        let n_cols = tiles.col_count();
+
+        if dir == Pos::NEG_Y {
+            for row in 0..n_rows {
+                for col in 0..n_cols {
+                    let pos = tiles.row_col_to_pos(row, col).unwrap();
+
+                    Self::tilt_one(tiles, pos, dir);
+                }
             }
+        } else if dir == Pos::Y {
+            for row in (0..n_rows).rev() {
+                for col in 0..n_cols {
+                    let pos = tiles.row_col_to_pos(row, col).unwrap();
 
-            self.tiles = tiles;
+                    Self::tilt_one(tiles, pos, dir);
+                }
+            }
+        } else if dir == Pos::X {
+            for col in (0..n_cols).rev() {
+                for row in 0..n_rows {
+                    let pos = tiles.row_col_to_pos(row, col).unwrap();
+
+                    Self::tilt_one(tiles, pos, dir);
+                }
+            }
+        } else if dir == Pos::NEG_X {
+            for col in 0..n_cols {
+                for row in 0..n_rows {
+                    let pos = tiles.row_col_to_pos(row, col).unwrap();
+
+                    Self::tilt_one(tiles, pos, dir);
+                }
+            }
+        } else {
+            unreachable!();
         }
     }
 
-    fn tilt_up_once(tiles: &mut Grid<Tile>) {
-        for row in 0..tiles.row_count() {
-            for col in 0..tiles.col_count() {
-                let pos = tiles.row_col_to_pos(row, col).unwrap();
+    fn tilt_one(tiles: &mut Grid<Tile>, pos: Pos, dir: Pos) {
+        match tiles[pos] {
+            Tile::Empty | Tile::Cube => {}
+            Tile::Round => {
+                let mut new_pos = pos;
+                let mut found = false;
+                loop {
+                    let Some(Tile::Empty) = tiles.get(new_pos + dir) else {
+                        break;
+                    };
+                    new_pos += dir;
 
-                match tiles[pos] {
-                    Tile::Empty | Tile::Cube => {}
-                    Tile::Round => {
-                        if let Some(above_pos) = pos.checked_sub(Pos::Y) {
-                            if tiles[above_pos] == Tile::Empty {
-                                Self::move_tile(tiles, pos, above_pos);
-                            }
-                        }
-                    }
+                    found = true;
+                }
+                if found {
+                    Self::move_tile(tiles, pos, new_pos);
                 }
             }
         }
@@ -69,31 +107,77 @@ impl fmt::Display for Platform {
     }
 }
 
-pub fn part_one(input: &str) -> Option<u32> {
-    let mut platform = parsing::parse_input(input);
-
-    debugln!("{platform}");
-    debugln!();
-
-    platform.tilt_up();
-
-    debugln!("{platform}");
-    debugln!();
-
-    let sum = platform
+fn load(platform: &Platform) -> i32 {
+    platform
         .tiles
         .indexed_iter()
         .map(|(pos, &tile)| match tile {
-            Tile::Round => platform.tiles.row_count() as u32 - pos.y,
+            Tile::Round => platform.tiles.row_count() as i32 - pos.y,
             _ => 0,
         })
-        .sum();
+        .sum()
+}
+
+pub fn part_one(input: &str) -> Option<i32> {
+    let mut platform = parsing::parse_input(input);
+
+    debugln!();
+    debugln!("{platform}");
+
+    platform.tilt(Pos::NEG_Y);
+
+    debugln!();
+    debugln!("{platform}");
+
+    let sum = load(&platform);
 
     Some(sum)
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+fn encode(platform: &Platform) -> Vec<u8> {
+    platform.tiles.iter().map(Tile::symbol).collect()
+}
+
+pub fn part_two(input: &str) -> Option<i32> {
+    let mut platform = parsing::parse_input(input);
+
+    debugln!();
+    debugln!("{platform}");
+
+    let mut seen = HashMap::new();
+
+    seen.insert(encode(&platform), (0, platform.clone()));
+
+    let mut first_seen_i = 0;
+    let mut first_seen_prev = 0;
+
+    for i in 1.. {
+        platform.spin_cylce();
+
+        debugln!();
+        debugln!("{platform}");
+
+        let encoded = encode(&platform);
+        if let Some((prev_seen_i, _platform)) = seen.get(&encoded) {
+            println!("SEEN BEFORE @ {prev_seen_i} (current = {i})");
+            first_seen_i = i;
+            first_seen_prev = *prev_seen_i;
+            break;
+        }
+        seen.insert(encoded, (i, platform.clone()));
+    }
+
+    let period_len = first_seen_i - first_seen_prev;
+    debugln!("period_len: {period_len}");
+
+    let final_idx = first_seen_prev + (1_000_000_000 - first_seen_prev) % period_len;
+
+    let final_platform = seen
+        .values()
+        .find_map(|(idx, platform)| (*idx == final_idx).then_some(platform))
+        .unwrap();
+
+    Some(load(final_platform))
 }
 
 mod parsing {
@@ -121,6 +205,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(64));
     }
 }
