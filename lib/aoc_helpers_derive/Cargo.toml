@@ -1,0 +1,18 @@
+[package]
+name = "aoc_helpers_derive"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+attribute-derive = "0.8"
+proc-macro-error = "1.0.4"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["parsing"] }
+
+[dev-dependencies]
+nom = "7.1"
+trybuild = "1"

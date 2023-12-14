@@ -66,3 +66,37 @@ pub fn final_parser<'a, O>(
 ) -> impl FnMut(&'a str) -> Result<O, nom::error::Error<&'a str>> {
     nom_supreme::final_parser::final_parser(parser)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_grid() {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, crate::grid::Tile)]
+        enum Tile {
+            #[tile('.')]
+            Empty,
+            #[tile('#')]
+            Full,
+        }
+
+        let input = ".#.\n.#.";
+
+        let (rest, grid) = super::grid::<glam::UVec2, _, _>(Tile::parse)(input).unwrap();
+        assert_eq!(rest, "");
+        assert_eq!(grid.row_count(), 2);
+        assert_eq!(grid.col_count(), 3);
+        assert_eq!(
+            grid.iter().copied().collect::<Vec<_>>(),
+            vec![
+                Tile::Empty,
+                Tile::Full,
+                Tile::Empty,
+                Tile::Empty,
+                Tile::Full,
+                Tile::Empty
+            ]
+        )
+    }
+}
