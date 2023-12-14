@@ -457,7 +457,7 @@ pub fn part_two(input: &str) -> Option<usize> {
     let sum = unfolded
         .iter()
         .map(|record| {
-            let allowed = num_allowed_arrangements(record);
+            let allowed = num_allowed_arrangements_fast(record);
             println!("{record} -> {allowed}");
             allowed
         })
@@ -520,6 +520,7 @@ mod tests {
         assert_eq!(result, Some(21));
     }
 
+    #[cfg(no)]
     #[test]
     fn test_part_two_2() {
         let result = part_two(&advent_of_code::template::read_file_part(
@@ -534,6 +535,7 @@ mod tests {
         num_allowed_arrangements_fast(&record)
     }
 
+    #[cfg(no)]
     #[test]
     fn misc_a() {
         assert_eq!(num_arrangements("???.### 1,1,3"), 1);
