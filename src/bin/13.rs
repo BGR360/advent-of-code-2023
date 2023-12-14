@@ -57,7 +57,19 @@ fn reflect_pos_about(mut pos: Pos, line: Line) -> Pos {
     pos
 }
 
-fn is_symmetric_about_line(pattern: &Pattern, line: Line) -> bool {
+fn pos_is_symmetric_about_line(pattern: &Pattern, pos: Pos, line: Line) -> bool {
+    let tile = pattern[pos];
+    let mirror_pos = reflect_pos_about(pos, line);
+    let mirror_tile = pattern.get(mirror_pos).copied();
+    match mirror_tile {
+        Some(t) if t == tile => true,
+        Some(_) => false,
+        // off the map, it's fine
+        None => true,
+    }
+}
+
+fn pattern_is_symmetric_about_line(pattern: &Pattern, line: Line) -> bool {
     let (line_pos, max_pos) = match line {
         Line::Vert { cols_left } => (cols_left, pattern.col_count() as i32),
         Line::Horiz { rows_up } => (rows_up, pattern.row_count() as i32),
@@ -66,16 +78,7 @@ fn is_symmetric_about_line(pattern: &Pattern, line: Line) -> bool {
         return false;
     }
 
-    let is_mirrored = |(pos, &tile): (Pos, &Tile)| {
-        let mirror_pos = reflect_pos_about(pos, line);
-        let mirror_tile = pattern.get(mirror_pos).copied();
-        match mirror_tile {
-            Some(t) if t == tile => true,
-            Some(_) => false,
-            // off the map, it's fine
-            None => true,
-        }
-    };
+    let is_mirrored = |(pos, _tile)| pos_is_symmetric_about_line(pattern, pos, line);
 
     let is_symmetric = pattern.indexed_iter().all(is_mirrored);
 
@@ -84,7 +87,43 @@ fn is_symmetric_about_line(pattern: &Pattern, line: Line) -> bool {
     is_symmetric
 }
 
-fn lines_of_reflection(pattern: &Pattern) -> impl Iterator<Item = Line> + '_ {
+fn find_symmetry_anomaly_about_line(pattern: &Pattern, line: Line) -> Option<Pos> {
+    let (line_pos, max_pos) = match line {
+        Line::Vert { cols_left } => (cols_left, pattern.col_count() as i32),
+        Line::Horiz { rows_up } => (rows_up, pattern.row_count() as i32),
+    };
+    if line_pos == 0 || line_pos == max_pos {
+        return None;
+    }
+
+    let mut anomaly = None;
+
+    for (pos, _tile) in pattern.indexed_iter() {
+        if !pos_is_symmetric_about_line(pattern, pos, line) {
+            debugln!("  anomaly: {pos}");
+            match anomaly {
+                None => {
+                    anomaly = Some(pos);
+                }
+                // Already found one anomaly, but we want exactly one.
+                Some(anomaly) if !(reflect_pos_about(anomaly, line) == pos) => return None,
+                _ => {}
+            }
+        }
+    }
+
+    anomaly
+}
+
+fn pattern_is_symmetric_about_line_with_one_smudge(pattern: &Pattern, line: Line) -> bool {
+    let is_symmetric = find_symmetry_anomaly_about_line(pattern, line).is_some();
+
+    debugln!("is_symmetric_about({line:?}) = {is_symmetric}");
+
+    is_symmetric
+}
+
+fn lines_of_reflection_part_one(pattern: &Pattern) -> impl Iterator<Item = Line> + '_ {
     let n_rows = pattern.row_count() as i32;
     let n_cols = pattern.col_count() as i32;
 
@@ -93,7 +132,19 @@ fn lines_of_reflection(pattern: &Pattern) -> impl Iterator<Item = Line> + '_ {
 
     vert_lines
         .chain(horiz_lines)
-        .filter(|&line| is_symmetric_about_line(pattern, line))
+        .filter(|&line| pattern_is_symmetric_about_line(pattern, line))
+}
+
+fn lines_of_reflection_part_two(pattern: &Pattern) -> impl Iterator<Item = Line> + '_ {
+    let n_rows = pattern.row_count() as i32;
+    let n_cols = pattern.col_count() as i32;
+
+    let vert_lines = (0..n_cols).map(|i| Line::Vert { cols_left: i });
+    let horiz_lines = (0..n_rows).map(|i| Line::Horiz { rows_up: i });
+
+    vert_lines
+        .chain(horiz_lines)
+        .filter(|&line| pattern_is_symmetric_about_line_with_one_smudge(pattern, line))
 }
 
 pub fn part_one(input: &str) -> Option<i32> {
@@ -104,7 +155,7 @@ pub fn part_one(input: &str) -> Option<i32> {
         .iter()
         .flat_map(|pattern| {
             debugln!("{pattern}");
-            lines_of_reflection(pattern)
+            lines_of_reflection_part_one(pattern)
         })
         .map(|line| match line {
             Line::Vert { cols_left } => cols_left,
@@ -115,8 +166,23 @@ pub fn part_one(input: &str) -> Option<i32> {
     Some(sum)
 }
 
-pub fn part_two(input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<i32> {
+    let valley = parsing::parse_input(input);
+
+    let sum = valley
+        .patterns
+        .iter()
+        .flat_map(|pattern| {
+            debugln!("{pattern}");
+            lines_of_reflection_part_two(pattern)
+        })
+        .map(|line| match line {
+            Line::Vert { cols_left } => cols_left,
+            Line::Horiz { rows_up } => 100 * rows_up,
+        })
+        .sum();
+
+    Some(sum)
 }
 
 mod parsing {
@@ -148,7 +214,7 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(400));
     }
 
     #[test]
