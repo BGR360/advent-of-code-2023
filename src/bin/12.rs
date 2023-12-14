@@ -448,6 +448,8 @@ pub fn part_one(input: &str) -> Option<usize> {
 pub fn part_two(input: &str) -> Option<usize> {
     let records = parsing::parse_input(input);
 
+    return None;
+
     let unfolded = records
         .into_iter()
         .map(ConditionRecord::unfold)
