@@ -1,7 +1,5 @@
 advent_of_code::solution!(11);
 
-use std::fmt;
-
 use advent_of_code::helpers::grid;
 use itertools::Itertools;
 
@@ -15,26 +13,15 @@ mod types {
     pub type Pos = glam::UVec2;
     pub type Grid<T> = grid::Grid<T, Pos>;
 
-    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(
+        Debug, Default, Clone, Copy, PartialEq, Eq, Hash, advent_of_code::helpers::grid::Tile,
+    )]
     pub enum Tile {
         #[default]
-        Space, // '.'
-        Galaxy, // '#'
-    }
-
-    impl Tile {
-        pub fn symbol(&self) -> u8 {
-            match self {
-                Tile::Space => b'.',
-                Tile::Galaxy => b'#',
-            }
-        }
-    }
-
-    impl fmt::Display for Tile {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "{}", self.symbol() as char)
-        }
+        #[tile('.')]
+        Space,
+        #[tile('#')]
+        Galaxy,
     }
 
     pub type Image = Grid<Tile>;

@@ -5,32 +5,19 @@ use itertools::Itertools;
 
 advent_of_code::solution!(12);
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, advent_of_code::helpers::grid::Tile)]
 pub enum Condition {
-    Unknown,     // '?'
-    Damaged,     // '#'
-    Operational, // '.'
-}
-
-impl Condition {
-    pub fn symbol(&self) -> u8 {
-        match self {
-            Condition::Unknown => b'?',
-            Condition::Damaged => b'#',
-            Condition::Operational => b'.',
-        }
-    }
+    #[tile('?')]
+    Unknown,
+    #[tile('#')]
+    Damaged,
+    #[tile('.')]
+    Operational,
 }
 
 impl fmt::Debug for Condition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
-    }
-}
-
-impl fmt::Display for Condition {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.symbol() as char)
     }
 }
 
