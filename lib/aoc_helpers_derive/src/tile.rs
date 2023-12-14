@@ -4,7 +4,7 @@ use quote::quote;
 use crate::{Error, Result};
 
 pub fn generate(input: syn::DeriveInput) -> Result<TokenStream> {
-    eprintln!("{input:#?}");
+    //eprintln!("{input:#?}");
 
     let eenum = parse_enum(&input)?;
 
