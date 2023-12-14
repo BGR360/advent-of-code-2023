@@ -429,16 +429,8 @@ mod parsing {
 
     use super::*;
 
-    fn condition(input: &str) -> IResult<&str, Condition> {
-        alt((
-            char('?').map(|_| Condition::Unknown),
-            char('#').map(|_| Condition::Damaged),
-            char('.').map(|_| Condition::Operational),
-        ))(input)
-    }
-
     fn row(input: &str) -> IResult<&str, ConditionRecord> {
-        let conditions = many1(condition);
+        let conditions = many1(Condition::parse);
         let damaged_groups = separated_list1(char(','), decimal_number);
 
         tuple((conditions, char(' '), damaged_groups))

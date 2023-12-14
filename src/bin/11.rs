@@ -147,15 +147,8 @@ mod parsing {
 
     use super::*;
 
-    fn tile(input: &str) -> IResult<&str, Tile> {
-        alt((
-            char('.').map(|_| Tile::Space),
-            char('#').map(|_| Tile::Galaxy),
-        ))(input)
-    }
-
     pub fn parse_input(input: &str) -> super::Map {
-        let image = final_parser(grid(tile))(input).expect("input should be valid");
+        let image = final_parser(grid(Tile::parse))(input).expect("input should be valid");
 
         super::Map::new(image)
     }
