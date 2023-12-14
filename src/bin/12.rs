@@ -166,14 +166,8 @@ impl fmt::Display for ConditionRecord {
     }
 }
 
-// #[derive(Debug)]
-// struct Arrangements {
-//     num_allowed: usize,
-//     num_ending_in_operational: usize,
-//     num_beginning_in_operational: usize,
-// }
-
-fn arrangements(record: &ConditionRecord) -> usize {
+#[allow(unused)]
+fn num_allowed_arrangements_slow(record: &ConditionRecord) -> usize {
     debugln!("===== arrangements =====");
     debugln!("record: {record}");
 
@@ -217,179 +211,158 @@ fn arrangements(record: &ConditionRecord) -> usize {
         .map(|damaged_indices| produce_arrangement(&damaged_indices))
         .filter(|arrangement| record.is_valid_arrangement(arrangement));
 
-    // let allowed_arrangements_and_endpoints: Vec<(bool, bool)> =
-    //     valid_arrangements.map(|arrangement| {
-    //         let beg = *arrangement.first().unwrap() == Condition::Operational;
-    //         let end = *arrangement.last().unwrap() == Condition::Operational;
-    //         (beg, end)
-    //     })
-    //     .collect();
-
     let num_allowed = valid_arrangements.count();
-    // let num_beginning_in_operational = allowed_arrangements_and_endpoints
-    //     .iter()
-    //     .filter(|&&(beg, end)| beg)
-    //     .count();
-    // let num_ending_in_operational = allowed_arrangements_and_endpoints
-    //     .iter()
-    //     .filter(|&&(beg, end)| end)
-    //     .count();
-
-    // let arr = Arrangements {
-    //     num_allowed,
-    //     num_ending_in_operational,
-    //     num_beginning_in_operational,
-    // };
 
     debugln!("{num_allowed:?}");
 
     num_allowed
 }
 
-fn num_allowed_arrangements(record: &ConditionRecord) -> usize {
-    arrangements(record)
+fn can_place_group_starting_at(record: &ConditionRecord, group_idx: usize, at: usize) -> bool {
+    use Condition::*;
+
+    let springs = &record.conditions;
+    let group_len = record.damaged_groups[group_idx];
+
+    #[cfg(debug_assertions)]
+    let msg = |success: bool| {
+        format!(
+            "{}{}{}{}",
+            "    ".repeated(group_idx),
+            springs[0..at]
+                .iter()
+                .map(|c| c.terminated_by(' '))
+                .separated_by(""),
+            (at..(at + group_len))
+                .filter_map(|i| springs.get(i))
+                .map(|_| if success { "✅" } else { "❌" })
+                .separated_by(""),
+            ((at + group_len)..springs.len())
+                .filter_map(|i| springs.get(i))
+                .map(|c| c.terminated_by(' '))
+                .separated_by("")
+        )
+    };
+
+    // The spring to the left must be '?' or '.' (or not present).
+    if let Some(prev) = at.checked_sub(1) {
+        if springs[prev] == Damaged {
+            debugln!("{} spring to the left isn't '?' or '.'", msg(false));
+            return false;
+        }
+    }
+
+    // All springs from `at` up to `at + group_len` must be '?' or '#'
+    for i in at..(at + group_len) {
+        match springs.get(i) {
+            Some(Operational) => {
+                debugln!("{} spring {i} isn't '?' or '#'", msg(false));
+                return false;
+            }
+            Some(_) => {}
+            None => {
+                debugln!("{} not enough room for group", msg(false));
+                return false;
+            }
+        }
+    }
+
+    // The spring at `at + group_len` must be '?' or '.' (or not present)
+    if let Some(end) = springs.get(at + group_len) {
+        if *end == Damaged {
+            debugln!("{} spring after the end isn't '?' or '.'", msg(false));
+            return false;
+        }
+    }
+
+    debugln!("{}", msg(true));
+
+    true
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct Memo {
     springs: Vec<SpringMemo>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct SpringMemo {
     groups: Vec<GroupMemo>,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 struct GroupMemo {
-    num_ways_prior: usize,
-    num_ways_at: usize,
+    num_ways: Option<usize>,
 }
 
-impl fmt::Display for Memo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let n_groups = self.springs[0].groups.len();
-        for group_idx in 0..n_groups {
-            writeln!(
-                f,
-                "{group_idx}| {}",
-                self.springs
-                    .iter()
-                    .map(|s_memo| s_memo.groups[group_idx].num_ways_at)
-                    .separated_by(' ')
-            )?;
-            writeln!(
-                f,
-                "{group_idx}< {}",
-                self.springs
-                    .iter()
-                    .map(|s_memo| s_memo.groups[group_idx].num_ways_prior)
-                    .separated_by(' ')
-            )?;
-        }
-        Ok(())
-    }
-}
-
-/// Returns the number of ways that it's possible to arrange the unknown springs
-/// (up to and including `spring_idx`) such that the `group_idx`-th contiguous
-/// group of damaged springs terminates at `spring_idx`.
-fn num_ways_group_can_end_at(
+fn num_ways_to_place_this_and_remaining_groups_at(
     record: &ConditionRecord,
-    memo: &Memo,
+    memo: &mut Memo,
     group_idx: usize,
-    spring_idx: usize,
+    at: usize,
 ) -> usize {
     use Condition::*;
 
     let springs = &record.conditions;
     let groups = &record.damaged_groups;
-    let group_size = groups[group_idx];
+
+    let group_len = groups[group_idx];
 
     #[cfg(debug_assertions)]
-    let fail_msg = format!("❌ group {group_idx} (len={group_size}) cannot end at {spring_idx}");
+    let indent = format!("{}", "    ".repeated(group_idx));
+    #[cfg(debug_assertions)]
+    let msg = format!("group {group_idx} @ {at}");
 
-    // The next spring must be either '?' or '.' (or nonexistent)
-    if let Some(Damaged) = springs.get(spring_idx + 1) {
-        debugln!("{fail_msg}: spring {} is '#'", spring_idx + 1);
-        return 0;
-    }
+    debugln!("{indent}{msg}");
 
-    // This spring and the previous `group_size - 1` springs must be either '#' or '?'
-    for i in 0..group_size {
-        if let Some(idx) = spring_idx.checked_sub(i) {
-            if let Some(Operational) = springs.get(idx) {
-                debugln!("{fail_msg}: spring {idx} is '.'");
-                return 0;
-            }
+    let num_ways = if let Some(memoized_result) = memo.springs[at].groups[group_idx].num_ways {
+        memoized_result
+    } else if group_idx == 0 && springs[0..at].iter().any(|&c| c == Damaged) {
+        // If this is the first group, there must be no damaged springs before `at`
+        debugln!("{indent}❌ {msg}: there are damaged springs before it");
+        0
+    } else if !can_place_group_starting_at(record, group_idx, at) {
+        debugln!("{indent}❌ {msg}: cannot place");
+        0
+    } else if group_idx == groups.len() - 1 {
+        // If this is the last group, there must be no damaged springs after
+        // `at`.
+        if ((at + group_len)..springs.len())
+            .filter_map(|i| springs.get(i))
+            .any(|&c| c == Damaged)
+        {
+            debugln!("{indent}❌ {msg}: there are damaged springs after it");
+            0
         } else {
-            debugln!("{fail_msg}: not enough room for group");
-            return 0;
+            1
         }
-    }
-
-    // The spring `group_size` before this spring must be either '?' or '.'
-    if let Some(one_before_group_start) = spring_idx.checked_sub(group_size) {
-        if let Some(Damaged) = springs.get(one_before_group_start) {
-            debugln!("{fail_msg}: spring {one_before_group_start} is '#'");
-            return 0;
-        }
-    }
-
-    // // If this is the last group, there can't be any '#' after it.
-    // if (group_idx == groups.len() - 1) && springs[(spring_idx + 1)..].iter().any(|&s| s == Damaged)
-    // {
-    //     debugln!("{fail_msg}: there are '#' after this index");
-    //     return 0;
-    // }
-
-    // It can't go here if it would result in too many '#'.
-    let damaged_budget: usize = groups[(group_idx + 1)..].iter().sum();
-    let remaining_damaged = springs[(spring_idx + 1)..]
-        .iter()
-        .filter(|&&s| s == Damaged)
-        .count();
-
-    if remaining_damaged > damaged_budget {
-        debugln!(
-            "{fail_msg}: the {} remaining '#' exceed budget of {}",
-            remaining_damaged,
-            damaged_budget
-        );
-        return 0;
-    }
-
-    // It also can't go here if it wouldn't leave enough room for the rest of
-    // the '#'.
-    let remaining_usable = springs[(spring_idx + 1)..]
-        .iter()
-        .filter(|&&s| s == Damaged || s == Unknown)
-        .count();
-    if remaining_usable < damaged_budget {
-        debugln!(
-            "{fail_msg}: only {} remaining '#' or '?', need at least {}",
-            remaining_usable,
-            damaged_budget
-        );
-        return 0;
-    }
-
-    // If all that checks out, then see how many ways the previous groups can be
-    // arranged.
-
-    let num_ways = if group_idx == 0 {
-        1
-    } else if let Some(one_before_group_start) = spring_idx.checked_sub(group_size) {
-        memo.springs[one_before_group_start].groups[group_idx - 1].num_ways_prior
     } else {
-        debugln!("{fail_msg}: no space for previous groups");
-        return 0;
+        // Now see how to place the rest of the groups.
+
+        let search_first = at + group_len + 1;
+
+        // Only check as far as the next '#'
+        let search_last = (search_first..springs.len())
+            .find(|&i| springs.get(i).copied() == Some(Damaged))
+            .unwrap_or(springs.len() - 1);
+
+        (search_first..=search_last)
+            .map(|place_next_group_at| {
+                num_ways_to_place_this_and_remaining_groups_at(
+                    record,
+                    memo,
+                    group_idx + 1,
+                    place_next_group_at,
+                )
+            })
+            .sum()
     };
 
-    debugln!(
-        "{} group {group_idx} (len={group_size}) can end at {spring_idx} in {num_ways} ways",
-        if num_ways == 0 { "❌" } else { "✅" }
-    );
+    memo.springs[at].groups[group_idx].num_ways = Some(num_ways);
+
+    if num_ways > 0 {
+        debugln!("{indent}✅ {msg}: {num_ways} ways");
+    }
 
     num_ways
 }
@@ -410,45 +383,28 @@ fn num_allowed_arrangements_fast(record: &ConditionRecord) -> usize {
         ],
     };
 
-    for spring_idx in 0..n_springs {
-        debugln!("=============== spring {spring_idx} ===============");
-        for group_idx in 0..n_groups {
-            let num_ways_at = num_ways_group_can_end_at(record, &memo, group_idx, spring_idx);
-
-            let num_ways_prior = if let Some(prior_spring_idx) = spring_idx.checked_sub(1) {
-                let prior_memo = &memo.springs[prior_spring_idx].groups[group_idx];
-
-                prior_memo.num_ways_at + prior_memo.num_ways_prior
-            } else {
-                0
-            };
-
-            memo.springs[spring_idx].groups[group_idx] = GroupMemo {
-                num_ways_prior,
-                num_ways_at,
-            };
-        }
-    }
-
-    let last_memo = memo.springs.last().unwrap().groups.last().unwrap();
-
-    debugln!("{memo}");
-
-    last_memo.num_ways_at + last_memo.num_ways_prior
+    (0..springs.len())
+        .map(|at| num_ways_to_place_this_and_remaining_groups_at(record, &mut memo, 0, at))
+        .sum()
 }
 
 pub fn part_one(input: &str) -> Option<usize> {
     let records = parsing::parse_input(input);
 
-    let sum = records.iter().map(num_allowed_arrangements).sum();
+    let sum = records
+        .iter()
+        .map(|record| {
+            let num = num_allowed_arrangements_fast(record);
+            debugln!("{record} => {num}");
+            num
+        })
+        .sum();
 
     Some(sum)
 }
 
 pub fn part_two(input: &str) -> Option<usize> {
     let records = parsing::parse_input(input);
-
-    return None;
 
     let unfolded = records
         .into_iter()
@@ -460,7 +416,7 @@ pub fn part_two(input: &str) -> Option<usize> {
         .iter()
         .map(|record| {
             let allowed = num_allowed_arrangements_fast(record);
-            println!("{record} -> {allowed}");
+            debugln!("{record} -> {allowed}");
             allowed
         })
         .sum();
@@ -497,6 +453,7 @@ mod parsing {
         final_parser(line_separated(row))(input).expect("input should be valid")
     }
 
+    #[cfg(test)]
     pub fn parse_record(input: &str) -> ConditionRecord {
         final_parser(row)(input).unwrap()
     }
@@ -522,7 +479,6 @@ mod tests {
         assert_eq!(result, Some(21));
     }
 
-    #[cfg(no)]
     #[test]
     fn test_part_two_2() {
         let result = part_two(&advent_of_code::template::read_file_part(
@@ -537,7 +493,6 @@ mod tests {
         num_allowed_arrangements_fast(&record)
     }
 
-    #[cfg(no)]
     #[test]
     fn misc_a() {
         assert_eq!(num_arrangements("???.### 1,1,3"), 1);
@@ -547,6 +502,8 @@ mod tests {
         assert_eq!(num_arrangements("???????# 2,1"), 5);
         assert_eq!(num_arrangements("?###????????# 3,2,1"), 5);
         assert_eq!(num_arrangements("?###????????? 3,2,1"), 15);
+
+        assert_eq!(num_arrangements("??#??#???????? 1,5,1"), 13);
     }
 
     fn num_arrangements_unfolded(record: &str) -> usize {
@@ -555,7 +512,6 @@ mod tests {
         num_allowed_arrangements_fast(&record)
     }
 
-    #[cfg(no)]
     #[test]
     fn misc_b() {
         assert_eq!(num_arrangements_unfolded("???.### 1,1,3"), 1);
@@ -564,5 +520,30 @@ mod tests {
         assert_eq!(num_arrangements_unfolded("????.#...#... 4,1,1"), 16);
         assert_eq!(num_arrangements_unfolded("????.######..#####. 1,6,5"), 2500);
         assert_eq!(num_arrangements_unfolded("?###???????? 3,2,1"), 506250);
+    }
+
+    fn can_place(record: &str) {
+        debugln!();
+        debugln!("{record} ====================");
+
+        let record = parsing::parse_record(record);
+
+        for group_idx in 0..record.damaged_groups.len() {
+            debugln!();
+            for at in 0..record.conditions.len() {
+                can_place_group_starting_at(&record, group_idx, at);
+            }
+        }
+    }
+
+    #[test]
+    fn test_can_place() {
+        can_place("???.### 1,1,3");
+        can_place(".??..??...?##. 1,1,3");
+        can_place("?#?#?#?#?#?#?#? 1,3,1,6");
+        can_place("????.#...#... 4,1,1");
+        can_place("????.######..#####. 1,6,5");
+        can_place("?###???????? 3,2,1");
+        // assert!(false);
     }
 }
