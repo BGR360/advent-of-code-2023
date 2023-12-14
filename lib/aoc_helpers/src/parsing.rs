@@ -6,7 +6,7 @@ pub use nom::{
     branch::*, bytes::complete::*, character::complete::*, combinator::*, multi::*, sequence::*, *,
 };
 
-use crate::helpers::grid::Grid;
+use crate::grid::Grid;
 
 /// Parses a decimal number like "42"
 pub fn decimal_number<T>(input: &str) -> IResult<&str, T>

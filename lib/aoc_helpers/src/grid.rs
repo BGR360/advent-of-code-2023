@@ -5,7 +5,7 @@ use std::{
 
 pub use glam::{IVec2, UVec2};
 
-use crate::helpers::math::CheckedSub;
+use crate::math::CheckedSub;
 
 /// A two-dimensional grid containing values of type `T` and indexed by values
 /// of type `Pos`.
