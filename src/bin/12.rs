@@ -1,6 +1,6 @@
 use std::fmt;
 
-use advent_of_code::debugln;
+use advent_of_code::{debugln, helpers::fmt::FmtExt};
 use itertools::Itertools;
 
 advent_of_code::solution!(12);
@@ -179,14 +179,14 @@ impl fmt::Display for ConditionRecord {
     }
 }
 
-#[derive(Debug)]
-struct Arrangements {
-    num_allowed: usize,
-    num_ending_in_operational: usize,
-    num_beginning_in_operational: usize,
-}
+// #[derive(Debug)]
+// struct Arrangements {
+//     num_allowed: usize,
+//     num_ending_in_operational: usize,
+//     num_beginning_in_operational: usize,
+// }
 
-fn arrangements(record: &ConditionRecord) -> Arrangements {
+fn arrangements(record: &ConditionRecord) -> usize {
     debugln!("===== arrangements =====");
     debugln!("record: {record}");
 
@@ -224,89 +224,230 @@ fn arrangements(record: &ConditionRecord) -> Arrangements {
             .collect_vec()
     };
 
-    let allowed_arrangements_and_endpoints: Vec<(bool, bool)> = unknown_indices
+    let valid_arrangements = unknown_indices
         .into_iter()
         .combinations(num_damaged_unknown)
         .map(|damaged_indices| produce_arrangement(&damaged_indices))
-        .filter(|arrangement| record.is_valid_arrangement(arrangement))
-        .map(|arrangement| {
-            let beg = *arrangement.first().unwrap() == Condition::Operational;
-            let end = *arrangement.last().unwrap() == Condition::Operational;
-            (beg, end)
-        })
-        .collect();
+        .filter(|arrangement| record.is_valid_arrangement(arrangement));
 
-    let num_allowed = allowed_arrangements_and_endpoints.len();
-    let num_beginning_in_operational = allowed_arrangements_and_endpoints
-        .iter()
-        .filter(|&&(beg, end)| beg)
-        .count();
-    let num_ending_in_operational = allowed_arrangements_and_endpoints
-        .iter()
-        .filter(|&&(beg, end)| end)
-        .count();
+    // let allowed_arrangements_and_endpoints: Vec<(bool, bool)> =
+    //     valid_arrangements.map(|arrangement| {
+    //         let beg = *arrangement.first().unwrap() == Condition::Operational;
+    //         let end = *arrangement.last().unwrap() == Condition::Operational;
+    //         (beg, end)
+    //     })
+    //     .collect();
 
-    let arr = Arrangements {
-        num_allowed,
-        num_ending_in_operational,
-        num_beginning_in_operational,
-    };
+    let num_allowed = valid_arrangements.count();
+    // let num_beginning_in_operational = allowed_arrangements_and_endpoints
+    //     .iter()
+    //     .filter(|&&(beg, end)| beg)
+    //     .count();
+    // let num_ending_in_operational = allowed_arrangements_and_endpoints
+    //     .iter()
+    //     .filter(|&&(beg, end)| end)
+    //     .count();
 
-    debugln!("{arr:#?}");
+    // let arr = Arrangements {
+    //     num_allowed,
+    //     num_ending_in_operational,
+    //     num_beginning_in_operational,
+    // };
 
-    arr
+    debugln!("{num_allowed:?}");
+
+    num_allowed
 }
 
 fn num_allowed_arrangements(record: &ConditionRecord) -> usize {
-    arrangements(record).num_allowed
+    arrangements(record)
 }
 
-fn num_allowed_arrangements_unfolded(mut record: ConditionRecord) -> usize {
-    debugln!("================= UNFOLDED ===================");
+#[derive(Debug, Default, Clone)]
+struct Memo {
+    springs: Vec<SpringMemo>,
+}
 
-    let Arrangements {
-        num_allowed,
-        num_ending_in_operational,
-        num_beginning_in_operational,
-    } = arrangements(&record);
+#[derive(Debug, Default, Clone)]
+struct SpringMemo {
+    groups: Vec<GroupMemo>,
+}
 
-    let mut total_arrangements = 0;
+#[derive(Debug, Default, Clone, Copy)]
+struct GroupMemo {
+    num_ways_prior: usize,
+    num_ways_at: usize,
+}
 
-    let num_not_ending_in_operational = num_allowed - num_ending_in_operational;
-    total_arrangements +=
-        num_not_ending_in_operational * num_allowed * num_allowed * num_allowed * num_allowed;
+impl fmt::Display for Memo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let n_groups = self.springs[0].groups.len();
+        for group_idx in 0..n_groups {
+            writeln!(
+                f,
+                "{group_idx}| {}",
+                self.springs
+                    .iter()
+                    .map(|s_memo| s_memo.groups[group_idx].num_ways_at)
+                    .separated_by(' ')
+            )?;
+            writeln!(
+                f,
+                "{group_idx}< {}",
+                self.springs
+                    .iter()
+                    .map(|s_memo| s_memo.groups[group_idx].num_ways_prior)
+                    .separated_by(' ')
+            )?;
+        }
+        Ok(())
+    }
+}
 
-    if num_ending_in_operational > 0 {
-        debugln!("===== ALT 1 =====");
+/// Returns the number of ways that it's possible to arrange the unknown springs
+/// (up to and including `spring_idx`) such that the `group_idx`-th contiguous
+/// group of damaged springs terminates at `spring_idx`.
+fn num_ways_group_can_end_at(
+    record: &ConditionRecord,
+    memo: &Memo,
+    group_idx: usize,
+    spring_idx: usize,
+) -> usize {
+    use Condition::*;
 
-        record.conditions.insert(0, Condition::Unknown);
-        let num_allowed_alt = num_allowed_arrangements(&record);
+    let springs = &record.conditions;
+    let groups = &record.damaged_groups;
+    let group_size = groups[group_idx];
 
-        total_arrangements += num_ending_in_operational
-            * num_allowed_alt
-            * num_allowed_alt
-            * num_allowed_alt
-            * num_allowed_alt;
+    #[cfg(debug_assertions)]
+    let fail_msg = format!("❌ group {group_idx} (len={group_size}) cannot end at {spring_idx}");
 
-        record.conditions.remove(0);
+    // The next spring must be either '?' or '.' (or nonexistent)
+    if let Some(Damaged) = springs.get(spring_idx + 1) {
+        debugln!("{fail_msg}: spring {} is '#'", spring_idx + 1);
+        return 0;
     }
 
-    // if num_beginning_in_operational > 0 {
-    //     debugln!("===== ALT 2 =====");
+    // This spring and the previous `group_size - 1` springs must be either '#' or '?'
+    for i in 0..group_size {
+        if let Some(idx) = spring_idx.checked_sub(i) {
+            if let Some(Operational) = springs.get(idx) {
+                debugln!("{fail_msg}: spring {idx} is '.'");
+                return 0;
+            }
+        } else {
+            debugln!("{fail_msg}: not enough room for group");
+            return 0;
+        }
+    }
 
-    //     record.conditions.push(Condition::Unknown);
-    //     let num_allowed_alt = num_allowed_arrangements(&record);
+    // The spring `group_size` before this spring must be either '?' or '.'
+    if let Some(one_before_group_start) = spring_idx.checked_sub(group_size) {
+        if let Some(Damaged) = springs.get(one_before_group_start) {
+            debugln!("{fail_msg}: spring {one_before_group_start} is '#'");
+            return 0;
+        }
+    }
 
-    //     total_arrangements += num_beginning_in_operational
-    //         * num_allowed_alt
-    //         * num_allowed_alt
-    //         * num_allowed_alt
-    //         * num_allowed_alt;
-
-    //     record.conditions.pop();
+    // // If this is the last group, there can't be any '#' after it.
+    // if (group_idx == groups.len() - 1) && springs[(spring_idx + 1)..].iter().any(|&s| s == Damaged)
+    // {
+    //     debugln!("{fail_msg}: there are '#' after this index");
+    //     return 0;
     // }
 
-    total_arrangements
+    // It can't go here if it would result in too many '#'.
+    let damaged_budget: usize = groups[(group_idx + 1)..].iter().sum();
+    let remaining_damaged = springs[(spring_idx + 1)..]
+        .iter()
+        .filter(|&&s| s == Damaged)
+        .count();
+
+    if remaining_damaged > damaged_budget {
+        debugln!(
+            "{fail_msg}: the {} remaining '#' exceed budget of {}",
+            remaining_damaged,
+            damaged_budget
+        );
+        return 0;
+    }
+
+    // It also can't go here if it wouldn't leave enough room for the rest of
+    // the '#'.
+    let remaining_usable = springs[(spring_idx + 1)..]
+        .iter()
+        .filter(|&&s| s == Damaged || s == Unknown)
+        .count();
+    if remaining_usable < damaged_budget {
+        debugln!(
+            "{fail_msg}: only {} remaining '#' or '?', need at least {}",
+            remaining_usable,
+            damaged_budget
+        );
+        return 0;
+    }
+
+    // If all that checks out, then see how many ways the previous groups can be
+    // arranged.
+
+    let num_ways = if group_idx == 0 {
+        1
+    } else if let Some(one_before_group_start) = spring_idx.checked_sub(group_size) {
+        memo.springs[one_before_group_start].groups[group_idx - 1].num_ways_prior
+    } else {
+        debugln!("{fail_msg}: no space for previous groups");
+        return 0;
+    };
+
+    debugln!(
+        "{} group {group_idx} (len={group_size}) can end at {spring_idx} in {num_ways} ways",
+        if num_ways == 0 { "❌" } else { "✅" }
+    );
+
+    num_ways
+}
+
+fn num_allowed_arrangements_fast(record: &ConditionRecord) -> usize {
+    let springs = &record.conditions;
+    let groups = &record.damaged_groups;
+
+    let n_springs = springs.len();
+    let n_groups = groups.len();
+
+    let mut memo = Memo {
+        springs: vec![
+            SpringMemo {
+                groups: vec![GroupMemo::default(); n_groups]
+            };
+            n_springs
+        ],
+    };
+
+    for spring_idx in 0..n_springs {
+        debugln!("=============== spring {spring_idx} ===============");
+        for group_idx in 0..n_groups {
+            let num_ways_at = num_ways_group_can_end_at(record, &memo, group_idx, spring_idx);
+
+            let num_ways_prior = if let Some(prior_spring_idx) = spring_idx.checked_sub(1) {
+                let prior_memo = &memo.springs[prior_spring_idx].groups[group_idx];
+
+                prior_memo.num_ways_at + prior_memo.num_ways_prior
+            } else {
+                0
+            };
+
+            memo.springs[spring_idx].groups[group_idx] = GroupMemo {
+                num_ways_prior,
+                num_ways_at,
+            };
+        }
+    }
+
+    let last_memo = memo.springs.last().unwrap().groups.last().unwrap();
+
+    debugln!("{memo}");
+
+    last_memo.num_ways_at + last_memo.num_ways_prior
 }
 
 pub fn part_one(input: &str) -> Option<usize> {
@@ -320,14 +461,19 @@ pub fn part_one(input: &str) -> Option<usize> {
 pub fn part_two(input: &str) -> Option<usize> {
     let records = parsing::parse_input(input);
 
-    // let unfolded = records
-    //     .into_iter()
-    //     .map(ConditionRecord::unfold)
-    //     .collect_vec();
-
-    let sum = records
+    let unfolded = records
         .into_iter()
-        .map(num_allowed_arrangements_unfolded)
+        .map(ConditionRecord::unfold)
+        .collect_vec();
+
+    // let sum = unfolded.iter().map(num_allowed_arrangements_fast).sum();
+    let sum = unfolded
+        .iter()
+        .map(|record| {
+            let allowed = num_allowed_arrangements(record);
+            println!("{record} -> {allowed}");
+            allowed
+        })
         .sum();
 
     Some(sum)
@@ -397,7 +543,8 @@ mod tests {
 
     fn num_arrangements(record: &str) -> usize {
         let record = parsing::parse_record(record);
-        num_allowed_arrangements(&record)
+        // num_allowed_arrangements(&record)
+        num_allowed_arrangements_fast(&record)
     }
 
     #[test]
@@ -406,14 +553,18 @@ mod tests {
         assert_eq!(num_arrangements(".??..??...?##. 1,1,3"), 4);
         assert_eq!(num_arrangements("?.??..??...?##. 1,1,3"), 8);
         assert_eq!(num_arrangements("?###???????? 3,2,1"), 10);
+        assert_eq!(num_arrangements("???????# 2,1"), 5);
+        assert_eq!(num_arrangements("?###????????# 3,2,1"), 5);
         assert_eq!(num_arrangements("?###????????? 3,2,1"), 15);
     }
 
     fn num_arrangements_unfolded(record: &str) -> usize {
         let record = parsing::parse_record(record);
-        num_allowed_arrangements_unfolded(record)
+        let record = record.unfold();
+        num_allowed_arrangements_fast(&record)
     }
 
+    #[cfg(no)]
     #[test]
     fn misc_b() {
         assert_eq!(num_arrangements_unfolded("???.### 1,1,3"), 1);
