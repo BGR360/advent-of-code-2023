@@ -12,8 +12,18 @@ pub fn part_one(input: &str) -> Option<u32> {
     None
 }
 
-pub fn part_two(input: &str) -> Option<u32> {
+pub fn part_two(_input: &str) -> Option<u32> {
     None
+}
+
+mod parsing {
+    use advent_of_code::helpers::parsing::*;
+
+    use super::*;
+
+    pub fn parse_input(input: &str) -> () {
+        final_parser(|_| Ok(())).expect("input should be valid")
+    }
 }
 
 #[cfg(test)]
