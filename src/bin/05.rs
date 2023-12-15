@@ -244,28 +244,14 @@ pub fn part_two(input: &str) -> Option<usize> {
 }
 
 mod parsing {
-    use nom::{
-        bytes::complete::{tag, take_until},
-        character::complete::{char, space0},
-        multi::many1,
-        sequence::tuple,
-        IResult, Parser,
-    };
-
-    use advent_of_code::helpers::parsing::{decimal_number, line_separated};
+    use advent_of_code::helpers::parsing::*;
 
     use super::*;
 
     fn range_pair(input: &str) -> IResult<&str, RangePair> {
-        tuple((
-            decimal_number,
-            char(' '),
-            decimal_number,
-            char(' '),
-            decimal_number,
-        ))
-        .map(|(dst_start, _, src_start, _, len)| RangePair::new(dst_start, src_start, len))
-        .parse(input)
+        ws_tuple((decimal_number, decimal_number, decimal_number))
+            .map(|(dst_start, src_start, len)| RangePair::new(dst_start, src_start, len))
+            .parse(input)
     }
 
     fn skip_line(input: &str) -> IResult<&str, ()> {
@@ -280,11 +266,9 @@ mod parsing {
     }
 
     fn seeds(input: &str) -> IResult<&str, Vec<usize>> {
-        let numbers = many1(tuple((space0, decimal_number)).map(|(_, n)| n));
+        let numbers = many1(preceded(space0, decimal_number));
 
-        tuple((tag("seeds: "), numbers))
-            .map(|(_, seeds)| seeds)
-            .parse(input)
+        preceded(tag("seeds: "), numbers).parse(input)
     }
 
     pub fn parse_input(input: &str) -> Almanac {

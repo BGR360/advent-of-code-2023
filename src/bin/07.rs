@@ -325,9 +325,7 @@ pub fn part_two(input: &str) -> Option<u32> {
 mod parsing {
     use super::*;
 
-    use advent_of_code::helpers::parsing::{decimal_number, final_parser, line_separated};
-    use nom::{bytes::complete::take, character::complete::char, sequence::tuple, IResult, Parser};
-    use nom_supreme::ParserExt;
+    use advent_of_code::helpers::parsing::*;
 
     fn hand<C: TryFrom<u8>>(input: &str) -> IResult<&str, Hand<C>> {
         take(5usize)
@@ -344,8 +342,7 @@ mod parsing {
     fn game<'a, C>(
         hand_parser: impl FnMut(&'a str) -> IResult<&'a str, Hand<C>>,
     ) -> impl Parser<&'a str, Game<C>, nom::error::Error<&'a str>> {
-        let line =
-            tuple((hand_parser, char(' '), decimal_number)).map(|(hand, _, bid)| (hand, bid));
+        let line = ws_tuple((hand_parser, decimal_number));
 
         line_separated(line).map(|hands_and_bids| Game { hands_and_bids })
     }

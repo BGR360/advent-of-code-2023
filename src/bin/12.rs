@@ -433,8 +433,8 @@ mod parsing {
         let conditions = many1(Condition::parse);
         let damaged_groups = separated_list1(char(','), decimal_number);
 
-        tuple((conditions, char(' '), damaged_groups))
-            .map(|(conditions, _, damaged_groups)| ConditionRecord {
+        separated_pair(conditions, char(' '), damaged_groups)
+            .map(|(conditions, damaged_groups)| ConditionRecord {
                 conditions,
                 damaged_groups,
             })

@@ -93,11 +93,7 @@ pub fn part_two(input: &str) -> Option<u32> {
 mod parsing {
     use super::*;
 
-    use nom::{
-        branch::alt, bytes::complete::tag, multi::separated_list1, sequence::tuple, IResult, Parser,
-    };
-
-    use advent_of_code::helpers::parsing::{decimal_number, final_parser, line_separated};
+    use advent_of_code::helpers::parsing::*;
 
     fn color(input: &str) -> IResult<&str, Color> {
         alt((
@@ -117,8 +113,7 @@ mod parsing {
     /// 3 green, 4 blue
     /// ```
     fn round(input: &str) -> IResult<&str, Round> {
-        let count_and_color =
-            tuple((decimal_number, tag(" "), color)).map(|(count, _, color)| (count, color));
+        let count_and_color = ws_tuple((decimal_number, color));
 
         separated_list1(tag(", "), count_and_color)
             .map(|cubes_revealed| Round { cubes_revealed })

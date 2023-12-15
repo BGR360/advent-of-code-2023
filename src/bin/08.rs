@@ -429,14 +429,14 @@ mod parsing {
     }
 
     fn node(input: &str) -> IResult<&str, (String, Node)> {
-        let label_pair = tuple((label, tag(", "), label)).map(|(left, _, right)| (left, right));
+        let label_pair = separated_pair(label, tag(", "), label);
 
-        tuple((
+        separated_pair(
             label,
             tag(" = "),
             delimited(char('('), label_pair, char(')')),
-        ))
-        .map(|(label, _, (left, right))| (label, Node { left, right }))
+        )
+        .map(|(label, (left, right))| (label, Node { left, right }))
         .parse(input)
     }
 
