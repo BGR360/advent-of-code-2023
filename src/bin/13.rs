@@ -190,12 +190,10 @@ mod parsing {
 
     use super::*;
 
-    fn pattern(input: &str) -> Grid<Tile> {
-        final_parser(grid(Tile::parse))(input).expect("input should be valid")
-    }
-
     pub fn parse_input(input: &str) -> Valley {
-        let patterns = input.split("\n\n").map(pattern).collect();
+        let pattern = grid(Tile::parse);
+
+        let patterns = final_parser(line_separated(pattern))(input).expect("input should be valid");
 
         Valley { patterns }
     }
