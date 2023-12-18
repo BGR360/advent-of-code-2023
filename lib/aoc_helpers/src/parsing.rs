@@ -7,10 +7,10 @@ pub use nom::{
 };
 pub use nom_supreme::ParserExt;
 
-mod grid;
+pub use crate::grid::parse_grid as grid;
+
 mod separated_tuple;
 
-pub use grid::grid;
 pub use separated_tuple::{separated_tuple, ws_tuple, SeparatedTuple};
 
 /// Parses a decimal number like "42"
@@ -20,6 +20,16 @@ where
     <T as FromStr>::Err: Debug,
 {
     take_while1(|c: char| c.is_ascii_digit())
+        .map(|number: &str| number.parse().expect("must parse"))
+        .parse(input)
+}
+
+pub fn single_digit_number<T>(input: &str) -> IResult<&str, T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Debug,
+{
+    take_while_m_n(1, 1, |c: char| c.is_ascii_digit())
         .map(|number: &str| number.parse().expect("must parse"))
         .parse(input)
 }

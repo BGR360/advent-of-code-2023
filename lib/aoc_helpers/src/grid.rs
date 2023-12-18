@@ -9,10 +9,16 @@ pub use aoc_helpers_derive::Tile;
 
 use crate::math::CheckedSub;
 
+mod dir;
+mod parse;
+
+pub use dir::{Dir, Pos};
+pub use parse::parse_grid;
+
 /// A two-dimensional grid containing values of type `T` and indexed by values
 /// of type `Pos`.
 #[derive(Debug, Clone)]
-pub struct Grid<T, Pos = UVec2> {
+pub struct Grid<T, Pos = IVec2> {
     pub inner: grid::Grid<T>,
     /// The minimum position in the grid. Used to compute (row, col) offsets.
     pub min: Pos,
