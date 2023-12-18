@@ -21,8 +21,12 @@ mod parsing {
 
     use super::*;
 
+    fn thing(input: &str) -> IResult<&str, ()> {
+        alphanumeric1(input).map(|(rest, _)| (rest, ()))
+    }
+
     pub fn parse_input(input: &str) -> () {
-        final_parser(|_| Ok(())).expect("input should be valid")
+        final_parser(thing)(input).expect("input should be valid")
     }
 }
 
