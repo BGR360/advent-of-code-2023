@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
 
 use glam::IVec2;
 
@@ -10,6 +10,12 @@ pub enum Dir {
     E,
     S,
     W,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Side {
+    Left,
+    Right,
 }
 
 impl Dir {
@@ -68,6 +74,54 @@ impl Dir {
         };
         Dir::parallel_to(diff)
     }
+
+    /// Returns an iterator that yields positions `pos + self`, `pos + self +
+    /// self`, `...`.
+    #[inline]
+    pub fn advance(&self, start_pos: Pos) -> Advance {
+        Advance::new(start_pos, *self)
+    }
+
+    #[inline]
+    pub const fn turn_to(&self, other: Dir) -> Option<Side> {
+        use Dir::*;
+        let side = match (*self, other) {
+            (N, E) => Side::Right,
+            (N, W) => Side::Left,
+
+            (E, S) => Side::Right,
+            (E, N) => Side::Left,
+
+            (S, W) => Side::Right,
+            (S, E) => Side::Left,
+
+            (W, N) => Side::Right,
+            (W, S) => Side::Left,
+
+            _ => return None,
+        };
+        Some(side)
+    }
+
+    #[inline]
+    pub const fn turn(&self, side: Side) -> Dir {
+        use Dir::*;
+        use Side::*;
+
+        match (*self, side) {
+            (N, Left) => W,
+            (N, Right) => E,
+
+            (E, Left) => N,
+            (E, Right) => S,
+
+            (S, Left) => E,
+            (S, Right) => W,
+
+            (W, Left) => S,
+            (W, Right) => N,
+        }
+    }
 }
 
 impl Add<Dir> for Pos {
@@ -98,5 +152,49 @@ impl Sub<Dir> for Pos {
 impl SubAssign<Dir> for Pos {
     fn sub_assign(&mut self, rhs: Dir) {
         *self -= rhs.to_vec()
+    }
+}
+
+impl Mul<i32> for Dir {
+    type Output = Pos;
+
+    #[inline]
+    fn mul(self, rhs: i32) -> Self::Output {
+        self.to_vec() * rhs
+    }
+}
+
+impl Mul<Dir> for i32 {
+    type Output = Pos;
+
+    #[inline]
+    fn mul(self, rhs: Dir) -> Self::Output {
+        rhs.to_vec() * self
+    }
+}
+
+pub struct Advance {
+    pos: Pos,
+    dir: Dir,
+}
+
+impl Advance {
+    pub fn new(start_pos: Pos, dir: Dir) -> Self {
+        Self {
+            pos: start_pos,
+            dir,
+        }
+    }
+}
+
+impl Iterator for Advance {
+    type Item = Pos;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.pos + self.dir;
+
+        self.pos = next;
+
+        Some(next)
     }
 }

@@ -7,12 +7,13 @@ pub use glam::{IVec2, UVec2};
 
 pub use aoc_helpers_derive::Tile;
 
-use crate::math::CheckedSub;
+use crate::math::{CheckedAdd, CheckedSub};
 
 mod dir;
+mod entry;
 mod parse;
 
-pub use dir::{Dir, Pos};
+pub use dir::{Dir, Pos, Side};
 pub use parse::parse_grid;
 
 /// A two-dimensional grid containing values of type `T` and indexed by values
@@ -87,6 +88,13 @@ impl<T, Pos> Grid<T, Pos> {
     {
         GridPrinter::new(self, f)
     }
+
+    // pub fn resize(&mut self, rows: usize, cols: usize)
+    // where
+    //     T: Default,
+    // {
+
+    // }
 }
 
 pub trait GridIndex: Copy + Sized {
@@ -151,6 +159,10 @@ where
             .map(|((row, col), t)| (self.make_pos(row, col).unwrap(), t))
     }
 
+    // pub fn entry(&mut self, pos: Pos) -> Entry<'_> {
+    //     Entry::new(self)
+    // }
+
     #[inline]
     fn make_pos(&self, row: usize, col: usize) -> Option<Pos> {
         Pos::from_row_col(row, col, self.min)
@@ -159,6 +171,85 @@ where
     #[inline]
     fn make_row_col(&self, pos: Pos) -> Option<(usize, usize)> {
         Pos::into_row_col(pos, self.min)
+    }
+}
+
+impl<T> Grid<T, Pos> {
+    pub fn grow_to_fit(&mut self, pos: Pos)
+    where
+        T: Default + Clone,
+    {
+        if self.contains(pos) {
+            return;
+        }
+
+        if self.size() == (0, 0) {
+            let n_new_cols = pos.x.abs() + 1;
+            let n_new_rows = pos.y.abs() + 1;
+
+            let new_row = vec![T::default(); n_new_cols.try_into().unwrap()];
+
+            for _ in 0..n_new_rows {
+                self.inner.insert_row(0, new_row.clone());
+            }
+
+            self.min.x = self.min.x.min(pos.x);
+            self.min.y = self.min.x.min(pos.y);
+        } else {
+            let min = self.min;
+            let max = self
+                .make_pos(self.row_count() - 1, self.col_count() - 1)
+                .unwrap();
+
+            if pos.x < min.x {
+                let new_col = vec![T::default(); self.row_count()];
+                let n_new_cols = min.x - pos.x;
+
+                for _ in 0..n_new_cols {
+                    self.inner.insert_col(0, new_col.clone());
+                }
+
+                self.min.x -= n_new_cols;
+            } else if pos.x > max.x {
+                let new_col = vec![T::default(); self.row_count()];
+                let n_new_cols = pos.x - max.x;
+
+                for _ in 0..n_new_cols {
+                    self.inner.insert_col(self.col_count(), new_col.clone());
+                }
+            }
+
+            let min = self.min;
+            let max = self
+                .make_pos(self.row_count() - 1, self.col_count() - 1)
+                .unwrap();
+
+            if pos.y < min.y {
+                let new_row = vec![T::default(); self.col_count()];
+                let n_new_rows = min.y - pos.y;
+
+                for _ in 0..n_new_rows {
+                    self.inner.insert_row(0, new_row.clone());
+                }
+
+                self.min.y -= n_new_rows;
+            } else if pos.y > max.y {
+                let new_row = vec![T::default(); self.col_count()];
+                let n_new_rows = pos.y - max.y;
+
+                for _ in 0..n_new_rows {
+                    self.inner.insert_row(self.row_count(), new_row.clone());
+                }
+            }
+        }
+    }
+
+    pub fn get_or_grow(&mut self, pos: Pos) -> &mut T
+    where
+        T: Default + Clone,
+    {
+        self.grow_to_fit(pos);
+        self.get_mut(pos).unwrap()
     }
 }
 
@@ -193,7 +284,7 @@ impl GridIndex for IVec2 {
             y: row.try_into().ok()?,
         };
 
-        pos.checked_sub(min)
+        min.checked_add(pos)
     }
 }
 
