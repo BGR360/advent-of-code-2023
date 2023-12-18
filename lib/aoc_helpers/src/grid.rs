@@ -12,7 +12,7 @@ use crate::math::CheckedSub;
 /// A two-dimensional grid containing values of type `T` and indexed by values
 /// of type `Pos`.
 #[derive(Debug, Clone)]
-pub struct Grid<T, Pos> {
+pub struct Grid<T, Pos = UVec2> {
     pub inner: grid::Grid<T>,
     /// The minimum position in the grid. Used to compute (row, col) offsets.
     pub min: Pos,
@@ -92,6 +92,11 @@ impl<T, Pos> Grid<T, Pos>
 where
     Pos: GridIndex,
 {
+    #[inline]
+    pub fn contains(&self, pos: Pos) -> bool {
+        self.get(pos).is_some()
+    }
+
     #[inline]
     pub fn get(&self, pos: Pos) -> Option<&T> {
         let (row, col) = self.make_row_col(pos)?;
