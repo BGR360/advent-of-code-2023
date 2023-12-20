@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 use std::str::FromStr;
 
-use nom::error::ParseError;
 pub use nom::{
-    branch::*, bytes::complete::*, character::complete::*, combinator::*, multi::*, sequence::*, *,
+    branch::*, bytes::complete::*, character::complete::*, combinator::*, error::ParseError,
+    multi::*, sequence::*, *,
 };
 pub use nom_supreme::ParserExt;
 
@@ -16,6 +16,10 @@ pub use numbers::{
     decimal_number, decimal_number_m_n, hex_number, hex_number_m_n, single_digit_number,
 };
 pub use separated_tuple::{separated_tuple, ws_tuple, SeparatedTuple};
+
+pub fn word(input: &str) -> IResult<&str, &str> {
+    alpha1(input)
+}
 
 pub fn line_separated<'a, T, E>(
     line_parser: impl Parser<&'a str, T, E>,
