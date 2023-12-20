@@ -35,6 +35,16 @@ impl Dir {
     }
 
     #[inline]
+    pub const fn is_vertical(&self) -> bool {
+        matches!(self, Dir::N | Dir::S)
+    }
+
+    #[inline]
+    pub const fn is_horizontal(&self) -> bool {
+        matches!(self, Dir::W | Dir::E)
+    }
+
+    #[inline]
     pub const fn to_vec(&self) -> IVec2 {
         match self {
             Dir::N => IVec2::NEG_Y,

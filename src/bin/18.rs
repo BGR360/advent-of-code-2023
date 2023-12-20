@@ -1,7 +1,5 @@
 advent_of_code::solution!(18);
 
-use std::collections::btree_map::Range;
-
 use advent_of_code::{
     debugln,
     helpers::grid::{self, Dir, Grid, Pos, Side},
@@ -88,7 +86,7 @@ pub enum Tile {
     Right,
 }
 
-fn winding_number(path: impl IntoIterator<Item = Dir>) -> i32 {
+fn winding_number(path: impl IntoIterator<Item = Dir>) -> i64 {
     let mut dirs: Vec<Dir> = path.into_iter().collect();
     dirs.push(dirs[0]);
 
@@ -102,7 +100,7 @@ fn winding_number(path: impl IntoIterator<Item = Dir>) -> i32 {
         .sum()
 }
 
-fn area_enclosed_by_dig_path(path: &DigPlan) -> u32 {
+fn area_enclosed_by_dig_path(path: &DigPlan) -> u64 {
     let mut pos = Pos::ZERO;
     let mut grid: Grid<Tile> = Grid::new(0, 0);
 
@@ -202,291 +200,73 @@ fn area_enclosed_by_dig_path(path: &DigPlan) -> u32 {
         .unwrap()
 }
 
-mod qt {
-    use super::*;
-
-    use quadtree_rs::{area::AreaBuilder, point::Point, Quadtree};
-
-    type Area = quadtree_rs::area::Area<i32>;
-
-    #[derive(Debug)]
-    pub struct RegionMap {
-        qt: Quadtree<i32, Option<Side>>,
-        min: Pos,
-        max: Pos,
-    }
-
-    impl RegionMap {
-        pub fn new(min: Pos, max: Pos) -> Self {
-            let xrange = max.x.abs_diff(min.x);
-            let yrange = max.y.abs_diff(min.y);
-
-            let range = xrange.max(yrange);
-
-            let depth = range.checked_ilog2().unwrap() + 1;
-
-            let mut qt = Quadtree::new(depth.try_into().unwrap());
-
-            qt.insert(Self::make_area_minmax(min, max), None);
-
-            Self { qt, min, max }
-        }
-
-        pub fn split(&mut self, cut_line_start: Pos, cut_line_end: Pos) {}
-
-        fn make_point(pos: Pos) -> Point<i32> {
-            Point { x: pos.x, y: pos.y }
-        }
-
-        fn make_area_minmax(min: Pos, max: Pos) -> Area {
-            let width = max.x - min.x + 1;
-            let height = max.y - min.y + 1;
-            AreaBuilder::default()
-                .anchor(Self::make_point(min))
-                .dimensions((width, height))
-                .build()
-                .unwrap()
-        }
-
-        fn make_areas_cut_line(&self, cut_line_start: Pos, cut_line_end: Pos) -> (Area, Area) {
-            let cut_line_dir = Dir::parallel_to(cut_line_end - cut_line_start)
-                .expect("cut line endpoints must be colinear");
-
-            let left = cut_line_dir.turn(Side::Left);
-            let right = cut_line_dir.turn(Side::Right);
-
-            let area_left =
-                self.make_area_cut_line(cut_line_start + left, cut_line_end + left, Side::Left);
-
-            let area_right =
-                self.make_area_cut_line(cut_line_start + right, cut_line_end + right, Side::Right);
-
-            (area_left, area_right)
-
-            // let line_min = cut_line_start.min(cut_line_end);
-            // let line_max = cut_line_start.max(cut_line_end);
-
-            // let (top, bot, left, right) = match cut_line_dir {
-            //     Dir::N | Dir::S => {
-            //         let top = line_min.y;
-            //         let bot = line_max.y;
-
-            //         let left = self.min.x;
-            //         let right = self.max.x;
-
-            //         (top, bot, left, right)
-            //     }
-            //     Dir::E | Dir::W => {
-            //         let top = self.min.y;
-            //         let bot = self.max.y;
-
-            //         let left = line_min.x;
-            //         let right = line_max.x;
-
-            //         (top, bot, left, right)
-            //     }
-            // };
-
-            // let top_left = Pos::new(left, top);
-            // let top_right = Pos::new(right, top);
-            // let bot_left = Pos::new(left, bot);
-            // let bot_right = Pos::new(right, bot);
-
-            // match cut_line_dir {
-            //     Dir::N => (
-            //         Self::make_area_minmax(top_left, line_max),
-            //         Self::make_area_minmax(line_min, bot_right),
-            //     ),
-            //     Dir::E => (
-            //         Self::make_area_minmax(top_left, line_max),
-            //         Self::make_area_minmax(line_min, bot_right),
-            //     ),
-            //     Dir::S => (
-            //         Self::make_area_minmax(line_min, bot_right),
-            //         Self::make_area_minmax(top_left, line_max),
-            //     ),
-            //     Dir::W => (
-            //         Self::make_area_minmax(line_min, bot_right),
-            //         Self::make_area_minmax(top_left, line_max),
-            //     ),
-            // }
-        }
-
-        // fn make_area_cut_line_and_dir(&self, line_a: Pos, line_b: Pos, dir: Dir) -> Area<i32> {
-        //     let line_min = line_a.min(line_b);
-        //     let line_max = line_a.max(line_b);
-
-        //     let (min, max) = match dir {
-        //         Dir::N => (Pos::new(line_min.x, self.min.y), Pos::new()),
-        //         Dir::E => {
-        //             line_c.x = self.max.x;
-        //             line_d.x = self.max.x;
-        //         }
-        //         Dir::S => {
-        //             line_c.y = self.max.y;
-        //             line_d.y = self.max.y;
-        //         }
-        //         Dir::W => {
-        //             line_c.x = self.min.x;
-        //             line_d.x = self.min.x;
-        //         }
-        //     };
-
-        //     let min = line_a.min();
-        // }
-
-        fn make_area_cut_line(&self, start: Pos, end: Pos, side: Side) -> Area {
-            use Dir::*;
-            use Side::*;
-
-            let dir = Dir::parallel_to(end - start).unwrap();
-
-            let line_min = start.min(end);
-            let line_max = start.max(end);
-
-            let (min, max) = match dir {
-                N | S => {
-                    let line_x = start.x;
-                    let min_y = line_min.y;
-                    let max_y = line_max.y;
-
-                    match (dir, side) {
-                        (N, Left) | (S, Right) => {
-                            // ........
-                            // ***|....
-                            // ***|....
-                            // ........
-                            (Pos::new(self.min.x, min_y), Pos::new(line_x, max_y))
-                        }
-
-                        (N, Right) | (S, Left) => {
-                            // ........
-                            // ...|****
-                            // ...|****
-                            // ........
-                            (Pos::new(line_x, min_y), Pos::new(self.max.x, max_y))
-                        }
-
-                        _ => unreachable!(),
-                    }
-                }
-                E | W => {
-                    let line_y = start.y;
-                    let min_x = line_min.x;
-                    let max_x = line_max.x;
-
-                    match (dir, side) {
-                        (E, Left) | (W, Right) => {
-                            // ..****..
-                            // ..----..
-                            // ........
-                            // ........
-                            (Pos::new(min_x, self.min.y), Pos::new(max_x, line_y))
-                        }
-
-                        (E, Right) | (W, Left) => {
-                            // ........
-                            // ..----..
-                            // ..****..
-                            // ..****..
-                            (Pos::new(min_x, line_y), Pos::new(max_x, self.max.y))
-                        }
-
-                        _ => unreachable!(),
-                    }
-                }
-            };
-        }
-
-        // precondition: no part of `cut` escapes `from`
-        fn cut_area_out(from: Area, cut: Area) -> SmallVec<[Area; 4]> {
-            /*
-              a  b   c  d
-              +--+---+--+
-              |         |
-             e+ f+---+g +h
-              |  |   |  |
-             i+ j+---+k +l
-              |         |
-              +--+---+--+
-              m  n   o  p
-            */
-
-            try_area(a, f);
-            try_area(b, g);
-            try_area(c, h);
-            try_area(e, j);
-            try_area(g, l);
-            try_area(i, n);
-            try_area(j, o);
-            try_area(k, p);
-
-            let (from_min, from_max) = Self::area_minmax(&from);
-            let (cut_min, cut_max) = Self::area_minmax(&cut);
-
-            let four_corners =
-                |min: Pos, max: Pos| (min, Pos::new(max.x, min.y), Pos::new(min.x, max.y), max);
-
-            let (a, d, m, p) = four_corners(from_min, from_max);
-            let (f, g, j, k) = four_corners(cut_min, cut_max);
-
-            let b = Pos::new(f.x, a.y);
-            let c = Pos::new(k.x, a.y);
-
-            let n = Pos::new(f.x, p.y);
-            let o = Pos::new(k.x, p.y);
-
-            let e = Pos::new(a.x, f.y);
-            let i = Pos::new(a.x, k.y);
-
-            let h = Pos::new(p.x, f.y);
-            let l = Pos::new(p.x, k.y);
-
-            let mut remaining_areas = SmallVec::new();
-
-            let mut try_area = |min: Pos, max: Pos| {
-                if min != max {
-                    remaining_areas.push(Self::make_area_minmax(min, max));
-                }
-            };
-
-            ()
-        }
-
-        fn area_minmax(area: &Area) -> (Pos, Pos) {
-            let min = area.anchor();
-            let min = Pos { x: min.x, y: min.y };
-            let size = Pos {
-                x: area.width(),
-                y: area.height(),
-            };
-
-            let max = min + size - Pos::ONE;
-
-            (min, max)
-        }
+fn dir_to_char(dir: Dir) -> char {
+    match dir {
+        Dir::N => '^',
+        Dir::E => '>',
+        Dir::S => 'v',
+        Dir::W => '<',
     }
 }
-use qt::RegionMap;
 
-fn area_enclosed_by_dig_path_fast(path: &DigPlan) -> u32 {
-    let (min, max) = path.min_and_max_positions();
+/// Uses an algorithm loosely inspired by the [shoelace algorithm] but adapted
+/// for the challenges of a discrete 2D grid.
+///
+/// [shoelace algorithm]: <https://en.wikipedia.org/wiki/Shoelace_formula>
+fn area_enclosed_by_dig_path_fast(path: &DigPlan) -> u64 {
+    // let winding_num = winding_number(path.steps.iter().map(|step| step.dir));
 
-    let mut regions = RegionMap::new(min, max);
+    let mut pos = Pos::ZERO;
+    let mut area: i64 = 0;
 
-    0
+    for step @ DigStep { dir, meters, .. } in path.steps.iter().copied() {
+        let addtl_area = if dir.is_horizontal() {
+            let stride = dir * meters;
+            debug_assert_eq!(stride.y, 0);
+            let stride = stride.x;
+
+            // Add (or subtract) one to the width to ensure we include the tiles
+            // carved out by the previous vertical edge.
+            let signed_width = stride + stride.signum();
+            let signed_height = pos.y + pos.y.signum();
+
+            let signed_area = i64::from(signed_height) * i64::from(signed_width);
+
+            signed_area
+        } else {
+            // Vertical edges contribute no area (the area carved out by them will
+            // be included when we do the next horizontal edge).
+            let stride = dir * meters;
+            debug_assert_eq!(stride.x, 0);
+            let stride = stride.y;
+
+            // let signed_height =
+
+            // let signed_area = i64::from(stride);
+            0
+        };
+
+        debugln!("{} {}{} => {addtl_area}", pos, dir_to_char(dir), meters);
+
+        area += addtl_area;
+
+        pos += dir * meters;
+    }
+
+    let area: u64 = area.abs().try_into().unwrap();
+    area
 }
 
-pub fn part_one(input: &str) -> Option<u32> {
+pub fn part_one(input: &str) -> Option<u64> {
     let plan = parsing::parse_input(input);
 
-    Some(area_enclosed_by_dig_path(&plan))
+    Some(area_enclosed_by_dig_path_fast(&plan))
 }
 
-pub fn part_two(input: &str) -> Option<u32> {
+pub fn part_two(input: &str) -> Option<u64> {
     let plan = parsing::parse_input(input).into_alt();
 
-    None
+    Some(area_enclosed_by_dig_path_fast(&plan))
 }
 
 mod parsing {
@@ -504,18 +284,22 @@ mod parsing {
         .parse(input)
     }
 
-    fn hex_digits<'a>(count: usize) -> impl FnMut(&'a str) -> IResult<&'a str, u8> {
-        move |input: &str| {
-            take_while_m_n(count, count, |c: char| c.is_hex_digit())
-                .map(|hex| u8::from_str_radix(hex, 16).expect("input already validated"))
-                .parse(input)
-        }
-    }
+    // fn hex_digits<'a, T>(count: usize) -> impl FnMut(&'a str) -> IResult<&'a str, T>
+    // where
+    //     T: FromStr,
+    //     <T as FromStr>::Err: fmt::Debug,
+    // {
+    //     move |input: &str| {
+    //         take_while_m_n(count, count, |c: char| c.is_hex_digit())
+    //             .map(|hex| u8::from_str_radix(hex, 16).expect("input already validated"))
+    //             .parse(input)
+    //     }
+    // }
 
     fn alt_step(input: &str) -> IResult<&str, AltStep> {
         let alt_step = preceded(
             char('#'),
-            tuple((hex_digits(5), hex_digits(1))).map_res(|(meters, dir)| {
+            tuple((hex_number_m_n(5, 5), hex_number_m_n::<u8>(1, 1))).map_res(|(meters, dir)| {
                 // 0 means R, 1 means D, 2 means L, and 3 means U.
                 let dir = match dir {
                     0 => Dir::E,
@@ -524,10 +308,7 @@ mod parsing {
                     3 => Dir::N,
                     _ => return Err(()),
                 };
-                Ok(AltStep {
-                    dir,
-                    meters: meters.into(),
-                })
+                Ok(AltStep { dir, meters })
             }),
         );
 
@@ -542,6 +323,23 @@ mod parsing {
 
     pub fn parse_input(input: &str) -> DigPlan {
         let steps = final_parser(line_separated(step))(input).expect("input should be valid");
+
+        DigPlan { steps }
+    }
+
+    fn step_simple(input: &str) -> IResult<&str, DigStep> {
+        ws_tuple((dir, decimal_number))
+            .map(|(dir, meters)| DigStep {
+                dir,
+                meters,
+                alt: AltStep { dir, meters },
+            })
+            .parse(input)
+    }
+
+    pub fn parse_input_simple(input: &str) -> DigPlan {
+        let steps = final_parser(separated_list1(space1, step_simple))(input)
+            .expect("input should be valid");
 
         DigPlan { steps }
     }
@@ -560,6 +358,144 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(952408144115));
+    }
+
+    #[track_caller]
+    fn do_test(input: &str) {
+        let plan = parsing::parse_input_simple(input);
+        let expected = area_enclosed_by_dig_path(&plan);
+        let actual = area_enclosed_by_dig_path_fast(&plan);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_misc01() {
+        do_test("R 4 D 4 L 4 U 4");
+        do_test("D 4 L 4 U 4 R 4");
+        do_test("L 4 U 4 R 4 D 4");
+        do_test("U 4 R 4 D 4 L 4");
+
+        do_test("R 4 U 4 L 4 D 4");
+        do_test("U 4 L 4 D 4 R 4");
+        do_test("L 4 D 4 R 4 U 4");
+        do_test("D 4 R 4 U 4 L 4");
+    }
+
+    /*
+    #####
+    #***#
+    S##*#
+    ..#*#
+    ..###
+     */
+    #[test]
+    fn test_misc02() {
+        do_test("R 2 D 2 R 2 U 4 L 4 D 2");
+    }
+
+    /*
+    #####
+    #***#
+    #***#
+    S##*#
+    ..#*#
+    ..###
+     */
+    #[test]
+    fn test_misc03() {
+        do_test("R 2 D 2 R 2 U 5 L 4 D 3");
+    }
+
+    /*
+    #####
+    #***#
+    S##*#
+    ..###
+     */
+    #[test]
+    fn test_misc04() {
+        do_test("R 2 D 1 R 2 U 3 L 4 D 2");
+    }
+
+    /*
+    #####
+    #***#
+    #***#
+    S##*#
+    ..###
+     */
+    #[test]
+    fn test_misc05() {
+        do_test("R 2 D 1 R 2 U 4 L 4 D 3");
+    }
+
+    /*
+    S####
+    #***#
+    ###*#
+    ..#*#
+    ..###
+     */
+    #[test]
+    fn test_misc06() {
+        do_test("R 4 D 4 L 2 U 2 L 2 U 2");
+    }
+
+    /*
+    ######
+    #****#
+    S###*#
+    ...#*#
+    ...###
+     */
+    #[test]
+    fn test_misc07() {
+        do_test("R 3 D 2 R 2 U 4 L 5 D 2");
+    }
+
+    /*
+    ######
+    #****#
+    S##**#
+    ..#**#
+    ..####
+     */
+    #[test]
+    fn test_misc08() {
+        do_test("R 2 D 2 R 3 U 4 L 5 D 2");
+    }
+
+    /*
+    ####
+    #**#
+    S#*#
+    .###
+     */
+    #[test]
+    fn test_misc09() {
+        do_test("R 1 D 1 R 2 U 3 L 3 D 2");
+    }
+
+    /*
+    #####
+    #***#
+    S#*##
+    .###.
+     */
+    #[test]
+    fn test_misc10() {
+        do_test("R 1 D 1 R 2 U 1 R 1 U 2 L 4 D 2");
+    }
+
+    /*
+    #####
+    S***#
+    ##*##
+    .###.
+     */
+    #[test]
+    fn test_misc11() {
+        do_test("D 1 R 1 D 1 R 2 U 1 R 1 U 2 L 4 D 1");
     }
 }
