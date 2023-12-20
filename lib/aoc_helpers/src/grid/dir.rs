@@ -18,6 +18,16 @@ pub enum Side {
     Right,
 }
 
+impl Side {
+    #[inline]
+    pub const fn opposite(&self) -> Self {
+        match self {
+            Side::Left => Side::Right,
+            Side::Right => Side::Left,
+        }
+    }
+}
+
 impl Dir {
     #[inline]
     pub const fn all() -> [Dir; 4] {

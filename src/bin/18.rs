@@ -18,24 +18,6 @@ impl DigPlan {
             steps: self.steps.into_iter().map(DigStep::into_alt).collect(),
         }
     }
-
-    pub fn min_and_max_positions(&self) -> (Pos, Pos) {
-        let mut pos = Pos::ZERO;
-
-        let mut min = Pos::ZERO;
-        let mut max = Pos::ZERO;
-
-        for DigStep { dir, meters, .. } in self.steps.iter().copied() {
-            let stride = dir * meters;
-            let next_pos = pos + stride;
-            pos = next_pos;
-
-            min = min.min(pos);
-            max = max.max(pos);
-        }
-
-        (min, max)
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -60,18 +42,6 @@ pub struct AltStep {
     pub dir: Dir,
     pub meters: i32,
 }
-
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, grid::Tile)]
-// pub enum Dir {
-//     #[tile('U')]
-//     Up,
-//     #[tile('D')]
-//     Down,
-//     #[tile('L')]
-//     Left,
-//     #[tile('R')]
-//     Right,
-// }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, grid::Tile)]
 pub enum Tile {
@@ -209,52 +179,271 @@ fn dir_to_char(dir: Dir) -> char {
     }
 }
 
-/// Uses an algorithm loosely inspired by the [shoelace algorithm] but adapted
-/// for the challenges of a discrete 2D grid.
-///
-/// [shoelace algorithm]: <https://en.wikipedia.org/wiki/Shoelace_formula>
-fn area_enclosed_by_dig_path_fast(path: &DigPlan) -> u64 {
-    // let winding_num = winding_number(path.steps.iter().map(|step| step.dir));
+/// Wraps an iterator and repeats its first element as the last element if the
+/// wrapped iterator doesn't already form a closed loop.
+pub struct CompleteLoop<I: Iterator> {
+    inner: Option<I>,
+    first: Option<I::Item>,
+    last: Option<I::Item>,
+}
 
-    let mut pos = Pos::ZERO;
-    let mut area: i64 = 0;
+impl<I: Iterator> CompleteLoop<I> {
+    pub fn new(inner: impl IntoIterator<IntoIter = I>) -> Self {
+        Self {
+            inner: Some(inner.into_iter()),
+            first: None,
+            last: None,
+        }
+    }
+}
 
-    for step @ DigStep { dir, meters, .. } in path.steps.iter().copied() {
-        let addtl_area = if dir.is_horizontal() {
-            let stride = dir * meters;
-            debug_assert_eq!(stride.y, 0);
-            let stride = stride.x;
+impl<I> Iterator for CompleteLoop<I>
+where
+    I: Iterator,
+    I::Item: Clone + PartialEq,
+{
+    type Item = I::Item;
 
-            // Add (or subtract) one to the width to ensure we include the tiles
-            // carved out by the previous vertical edge.
-            let signed_width = stride + stride.signum();
-            let signed_height = pos.y + pos.y.signum();
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.inner.as_mut().and_then(|inner| inner.next());
 
-            let signed_area = i64::from(signed_height) * i64::from(signed_width);
+        match next {
+            Some(item) => {
+                self.last = Some(item.clone());
 
-            signed_area
-        } else {
-            // Vertical edges contribute no area (the area carved out by them will
-            // be included when we do the next horizontal edge).
-            let stride = dir * meters;
-            debug_assert_eq!(stride.x, 0);
-            let stride = stride.y;
+                if self.first.is_none() {
+                    self.first = Some(item.clone());
+                }
 
-            // let signed_height =
+                Some(item)
+            }
+            None => {
+                // Inner iterator is done, mark it None so we don't keep
+                // calling it.
+                self.inner = None;
 
-            // let signed_area = i64::from(stride);
-            0
-        };
+                // Yield the first item now, if it wasn't yielded last.
+                let first = self.first.take();
+                let last = self.last.take();
+                if last != first {
+                    first
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
 
-        debugln!("{} {}{} => {addtl_area}", pos, dir_to_char(dir), meters);
+struct RepeatFirst<I: Iterator> {
+    inner: Option<I>,
+    first: Option<I::Item>,
+}
 
-        area += addtl_area;
+impl<I: Iterator> RepeatFirst<I> {
+    pub fn new(inner: impl IntoIterator<IntoIter = I>) -> Self {
+        Self {
+            inner: Some(inner.into_iter()),
+            first: None,
+        }
+    }
+}
 
-        pos += dir * meters;
+impl<I> Iterator for RepeatFirst<I>
+where
+    I: Iterator,
+    I::Item: Clone + PartialEq,
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self.inner.as_mut().and_then(|inner| inner.next());
+
+        match next {
+            Some(item) => {
+                if self.first.is_none() {
+                    self.first = Some(item.clone());
+                }
+
+                Some(item)
+            }
+            None => {
+                // Inner iterator is done, mark it None so we don't keep
+                // calling it.
+                self.inner = None;
+
+                // Yield the first item now
+                self.first.take()
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod iterator_tests {
+    use super::*;
+
+    use itertools::assert_equal;
+
+    #[test]
+    fn test_complete_loop() {
+        assert_equal(CompleteLoop::new(Vec::<i32>::new()), []);
+        assert_equal(CompleteLoop::new([1]), [1]);
+        assert_equal(CompleteLoop::new([1, 2, 3]), [1, 2, 3, 1]);
+        assert_equal(CompleteLoop::new([1, 2, 1]), [1, 2, 1]);
     }
 
-    let area: u64 = area.abs().try_into().unwrap();
-    area
+    #[test]
+    fn test_repeat_first() {
+        assert_equal(RepeatFirst::new(Vec::<i32>::new()), []);
+        assert_equal(RepeatFirst::new([1]), [1, 1]);
+        assert_equal(RepeatFirst::new([1, 2, 3]), [1, 2, 3, 1]);
+    }
+}
+
+/// Computes the area of an arbitrary, non-intersecting polygon using the
+/// [shoelace algorithm].
+///
+/// [shoelace algorithm]: <https://en.wikipedia.org/wiki/Shoelace_formula>
+fn area_of_polygon(vertices: impl IntoIterator<Item = Pos>) -> u64 {
+    let vertices = CompleteLoop::new(vertices);
+
+    let signed_area: i64 = vertices
+        .tuple_windows()
+        .map(|(a, b)| (i64::from(a.x) * i64::from(b.y)) - (i64::from(a.y) * i64::from(b.x)))
+        .sum();
+
+    signed_area.abs().try_into().unwrap()
+}
+
+/// Computes the total number of "city blocks" enclosed by the dig path.
+///
+/// This is done by:
+///
+///     1. converting the "tiles space" coordinates of the dig path vertices to
+///        "lattice point" coordinates that fully enclose all of the dug tiles.
+///
+///     2. running the converted coordinates through the shoelace algorithm.
+fn area_enclosed_by_dig_path_fast(path: &DigPlan) -> u64 {
+    // Consider the dig path:
+    //
+    //      R 2
+    //      D 1
+    //      L 1
+    //      D 1
+    //      L 1
+    //      U 2
+    //
+    // I want to go from this:
+    //
+    //        0 1 2       0 1 2
+    //      0 # # #     0 a - b
+    //      1 # # #     1 | d c
+    //      2 # # .     2 f e
+    //
+    // To this:
+    //
+    //        0 1 2 3      0 1 2 3
+    //      0 +-+-+-+    0 a-----b
+    //        |#|#|#|      |# # #|
+    //      1 +-+-+-+    1 |     |
+    //        |#|#|#|      |# # #|
+    //      2 +-+-+-+    2 |   d-c
+    //        |#|#|.|      |# #|.
+    //      3 +-+-+-+    3 f---e
+    //
+    // So it seems like the general rule for that is:
+    //
+    //      At every corner in the path, if you are turning "into" the dug tiles,
+    //      then go one step further before you turn. If you're turning "away"
+    //      from the dug tiles, then don't add one.
+    //
+    // So first figure out on which side of the path the dug tiles lie.
+
+    let winding_num = winding_number(path.steps.iter().map(|step| step.dir));
+
+    let inside = match winding_num {
+        1.. => Side::Right,
+        _ => Side::Left,
+    };
+
+    let start_pos = Pos::ZERO;
+
+    #[derive(Debug, Clone, Copy)]
+    struct ScanState {
+        pos: Pos,
+        prev_dir: Option<Dir>,
+    }
+
+    let polygon_vertices_surrounding_tiles =
+        std::iter::once(start_pos).chain(path.steps.iter().scan(
+            ScanState {
+                pos: start_pos,
+                prev_dir: None,
+            },
+            |state, &DigStep { dir, meters, .. }| {
+                let mut pos = state.pos;
+
+                // Advance pos by one more step in the previous direction if this
+                // "corner" of the path turns "toward" the inside of the path.
+                if let Some(prev_dir) = state.prev_dir {
+                    let turn = prev_dir.turn_to(dir).unwrap();
+                    if turn != inside {
+                        pos += prev_dir;
+                    }
+                }
+
+                let stride = dir * meters;
+                let next_pos = pos + stride;
+
+                state.pos = next_pos;
+                state.prev_dir = Some(dir);
+
+                Some(next_pos)
+            },
+        ));
+
+    #[cfg(debug_assertions)]
+    {
+        let mut pos = Pos::ZERO;
+        let mut grid: Grid<u8> = Grid::new(0, 0);
+
+        let set_dug = |grid: &mut Grid<u8>, pos: Pos| {
+            let pos = Pos::ONE + 2 * pos;
+            *grid.get_or_grow(pos) = b'#';
+        };
+
+        let set_vertex = |grid: &mut Grid<u8>, pos: Pos| {
+            let pos = 2 * pos;
+            *grid.get_or_grow(pos) = b'*';
+        };
+
+        for DigStep { dir, meters, .. } in path.steps.iter().copied() {
+            let stride = dir * meters;
+
+            let next_pos = pos + stride;
+
+            for dig_pos in dir.advance(pos).take(meters.try_into().unwrap()) {
+                set_dug(&mut grid, dig_pos);
+            }
+
+            pos = next_pos;
+        }
+
+        for vertex in polygon_vertices_surrounding_tiles.clone() {
+            set_vertex(&mut grid, vertex);
+        }
+
+        debugln!(
+            "{}",
+            grid.display_with(|&b| match b {
+                0 => '.',
+                _ => b as char,
+            })
+        );
+    }
+
+    area_of_polygon(polygon_vertices_surrounding_tiles)
 }
 
 pub fn part_one(input: &str) -> Option<u64> {
@@ -283,18 +472,6 @@ mod parsing {
         ))
         .parse(input)
     }
-
-    // fn hex_digits<'a, T>(count: usize) -> impl FnMut(&'a str) -> IResult<&'a str, T>
-    // where
-    //     T: FromStr,
-    //     <T as FromStr>::Err: fmt::Debug,
-    // {
-    //     move |input: &str| {
-    //         take_while_m_n(count, count, |c: char| c.is_hex_digit())
-    //             .map(|hex| u8::from_str_radix(hex, 16).expect("input already validated"))
-    //             .parse(input)
-    //     }
-    // }
 
     fn alt_step(input: &str) -> IResult<&str, AltStep> {
         let alt_step = preceded(
