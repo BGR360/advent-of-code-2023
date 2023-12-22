@@ -1,0 +1,7 @@
+broadcaster -> AA
+%AA -> AB, AX
+%AB -> AC
+%AC -> AX, AD
+%AD -> AL
+%AL -> AX
+&AX -> rx

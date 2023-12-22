@@ -1,0 +1,18 @@
+@258957: Pulse { src: "dc", dest: "ns", high: true }
+@518320: Pulse { src: "dc", dest: "ns", high: true } (259363)
+@777690: Pulse { src: "dc", dest: "ns", high: true } (259370)
+@1037018: Pulse { src: "dc", dest: "ns", high: true }
+
+@262456: Pulse { src: "vp", dest: "ns", high: true }
+@525200: Pulse { src: "vp", dest: "ns", high: true }
+@787964: Pulse { src: "vp", dest: "ns", high: true }
+@1050747: Pulse { src: "vp", dest: "ns", high: true }
+
+@264552: Pulse { src: "cq", dest: "ns", high: true }
+@276445: Pulse { src: "rv", dest: "ns", high: true }
+@529348: Pulse { src: "cq", dest: "ns", high: true }
+@553106: Pulse { src: "rv", dest: "ns", high: true }
+@794159: Pulse { src: "cq", dest: "ns", high: true }
+@829833: Pulse { src: "rv", dest: "ns", high: true }
+@1058973: Pulse { src: "cq", dest: "ns", high: true }
+@1106479: Pulse { src: "rv", dest: "ns", high: true }

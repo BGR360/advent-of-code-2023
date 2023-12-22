@@ -1,0 +1,16 @@
+broadcaster -> AA, BA
+%AA -> AB, AX
+%AB -> AC
+%AC -> AX, AD
+%AD -> AL
+%AL -> AX
+&AX -> AZ, AD, AA, AB
+&AZ -> TX
+%BA -> BB, BX
+%BB -> BX, BC
+%BC -> BX, BD
+%BD -> BL
+%BL -> BX
+&BX -> BD, BZ, BA
+&BZ -> TX
+&TX -> rx
